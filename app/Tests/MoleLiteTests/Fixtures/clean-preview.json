@@ -1,0 +1,110 @@
+[
+  {
+    "rule_id": "user_cache-01",
+    "section": "user_cache",
+    "path": "/Users/demo/Library/Caches/com.apple.Safari",
+    "size_bytes": 52428800,
+    "default_selected": true,
+    "needs_admin": false,
+    "risk": "low",
+    "items": 12,
+    "size_known": true,
+    "covered_by": null
+  },
+  {
+    "rule_id": "user_cache-01",
+    "section": "user_cache",
+    "path": "/Users/demo/Library/Caches/Google/Chrome/Default/Cache",
+    "size_bytes": 73400320,
+    "default_selected": false,
+    "needs_admin": false,
+    "risk": "medium",
+    "items": 214,
+    "size_known": true,
+    "covered_by": null
+  },
+  {
+    "rule_id": "user_cache-01",
+    "section": "user_cache",
+    "path": "/Users/demo/Library/Caches/com.apple.Safari/WebKit",
+    "size_bytes": 0,
+    "default_selected": false,
+    "needs_admin": false,
+    "risk": "low",
+    "items": 0,
+    "size_known": false,
+    "covered_by": "user_cache-01:/Users/demo/Library/Caches/com.apple.Safari"
+  },
+  {
+    "rule_id": "user_cache-02",
+    "section": "logs",
+    "path": "/Users/demo/Library/Logs/DiagnosticReports",
+    "size_bytes": 8388608,
+    "default_selected": true,
+    "needs_admin": false,
+    "risk": "low",
+    "items": 41,
+    "size_known": true,
+    "covered_by": null
+  },
+  {
+    "rule_id": "trash-01",
+    "section": "trash",
+    "path": "/Users/demo/.Trash/old-installer.dmg",
+    "size_bytes": 1073741824,
+    "default_selected": true,
+    "needs_admin": false,
+    "risk": "high",
+    "items": 1,
+    "size_known": true,
+    "covered_by": null
+  },
+  {
+    "rule_id": "system_cache-01",
+    "section": "system_cache",
+    "path": "/Users/demo/Library/Caches/com.apple.dyld",
+    "size_bytes": 314572800,
+    "default_selected": false,
+    "needs_admin": true,
+    "risk": "high",
+    "items": 34,
+    "size_known": true,
+    "covered_by": null
+  },
+  {
+    "rule_id": "dev_cache-xcode",
+    "section": "dev_cache",
+    "path": "/Users/demo/Library/Developer/Xcode/DerivedData",
+    "size_bytes": 2147483648,
+    "default_selected": true,
+    "needs_admin": false,
+    "risk": "medium",
+    "items": 3,
+    "size_known": true,
+    "covered_by": null
+  },
+  {
+    "rule_id": "downloads-01",
+    "section": "downloads",
+    "path": "/Users/demo/Downloads/Example-1.2.3.dmg",
+    "size_bytes": 209715200,
+    "default_selected": false,
+    "needs_admin": false,
+    "risk": "medium",
+    "items": 1,
+    "size_known": true,
+    "covered_by": null
+  },
+  {
+    "rule_id": "pip-cache",
+    "section": "dev_cache",
+    "path": "/Users/demo/Library/Caches/pip",
+    "size_bytes": 0,
+    "default_selected": true,
+    "needs_admin": false,
+    "risk": "low",
+    "items": 0,
+    "size_known": false,
+    "covered_by": null
+  }
+]

@@ -1,0 +1,60 @@
+{
+  "scan_status": "complete",
+  "path": "/Users/demo",
+  "overview": true,
+  "entries": [
+    {
+      "scan_status": "ok",
+      "name": "Library",
+      "path": "/Users/demo/Library",
+      "size": 42949672960,
+      "is_dir": true,
+      "insight": true,
+      "cleanable": false,
+      "last_access": "2026-11-13"
+    },
+    {
+      "scan_status": "ok",
+      "name": "Movies",
+      "path": "/Users/demo/Movies",
+      "size": 12884901888,
+      "is_dir": true,
+      "insight": false,
+      "cleanable": false,
+      "last_access": "2026-10-02"
+    },
+    {
+      "scan_status": "ok",
+      "name": "Downloads",
+      "path": "/Users/demo/Downloads",
+      "size": 3221225472,
+      "is_dir": true,
+      "insight": true,
+      "cleanable": true,
+      "last_access": "2026-11-14"
+    },
+    {
+      "scan_status": "unavailable",
+      "name": "Photos Library.photoslibrary",
+      "path": "/Users/demo/Pictures/Photos Library.photoslibrary",
+      "size": 0,
+      "is_dir": true,
+      "insight": false,
+      "cleanable": false
+    }
+  ],
+  "large_files": [
+    {
+      "name": "backup-2026.tar.zst",
+      "path": "/Users/demo/Movies/backup-2026.tar.zst",
+      "size": 8589934592
+    },
+    {
+      "name": "Xcode_15.4.xip",
+      "path": "/Users/demo/Downloads/Xcode_15.4.xip",
+      "size": 2952790016
+    }
+  ],
+  "total_size": 59055800320,
+  "total_files": 184320
+}

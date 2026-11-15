@@ -1,0 +1,62 @@
+[
+  {
+    "app": "Slack",
+    "bundle_id": "com.tinyspeck.slackmacgap",
+    "path": "/Users/demo/Applications/Slack.app",
+    "kind": "app",
+    "size_bytes": 268435456,
+    "default_selected": true,
+    "needs_admin": false,
+    "risk": "low",
+    "action": "trash",
+    "mode": "trash"
+  },
+  {
+    "app": "Slack",
+    "bundle_id": "com.tinyspeck.slackmacgap",
+    "path": "/Users/demo/Library/Application Support/Slack",
+    "kind": "app_support",
+    "size_bytes": 1288490188,
+    "default_selected": true,
+    "needs_admin": false,
+    "risk": "medium",
+    "action": "trash",
+    "mode": "trash"
+  },
+  {
+    "app": "Slack",
+    "bundle_id": "com.tinyspeck.slackmacgap",
+    "path": "/Users/demo/Library/Caches/com.tinyspeck.slackmacgap",
+    "kind": "caches",
+    "size_bytes": 52428800,
+    "default_selected": true,
+    "needs_admin": false,
+    "risk": "low",
+    "action": "trash",
+    "mode": "trash"
+  },
+  {
+    "app": "Slack",
+    "bundle_id": "com.tinyspeck.slackmacgap",
+    "path": "/Users/demo/Library/Preferences/com.tinyspeck.slackmacgap.plist",
+    "kind": "preferences",
+    "size_bytes": 8192,
+    "default_selected": true,
+    "needs_admin": false,
+    "risk": "low",
+    "action": "trash",
+    "mode": "trash"
+  },
+  {
+    "app": "Slack",
+    "bundle_id": "com.tinyspeck.slackmacgap",
+    "path": "/Users/demo/Library/LaunchAgents/com.tinyspeck.slackmacgap.plist",
+    "kind": "launch_agent",
+    "size_bytes": 1024,
+    "default_selected": false,
+    "needs_admin": true,
+    "risk": "high",
+    "action": "trash",
+    "mode": "trash"
+  }
+]

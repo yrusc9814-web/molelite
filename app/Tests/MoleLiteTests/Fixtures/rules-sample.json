@@ -1,0 +1,47 @@
+[
+  {
+    "id": "installer-dmg",
+    "category": "downloads",
+    "paths": ["/Users/demo/Downloads/*.dmg"],
+    "match": "只匹配 Downloads 一级目录下的磁盘映像；先校验无进程占用再进废纸篓",
+    "default_selected": true,
+    "risk": "medium",
+    "needs_admin": false,
+    "action": "trash",
+    "command": null,
+    "protected_by": ["P-01", "P-04"],
+    "source": "app-fixture:installer-dmg",
+    "in_app": true,
+    "in_app_evidence": "fixture"
+  },
+  {
+    "id": "system-cache",
+    "category": "system_cache",
+    "paths": ["/Library/Caches/*"],
+    "match": "系统级缓存目录；需要管理员权限，默认不勾选",
+    "default_selected": false,
+    "risk": "high",
+    "needs_admin": true,
+    "action": "delete",
+    "command": null,
+    "protected_by": ["P-03", "P-05"],
+    "source": "app-fixture:system-cache",
+    "in_app": false,
+    "in_app_evidence": "fixture"
+  },
+  {
+    "id": "xcode-derived-data",
+    "category": "developer",
+    "paths": ["/Users/demo/Library/Developer/Xcode/DerivedData/*"],
+    "match": "只删除 DerivedData 下的构建产物，保留目录本身",
+    "default_selected": true,
+    "risk": "low",
+    "needs_admin": false,
+    "action": "delete",
+    "command": null,
+    "protected_by": ["P-04"],
+    "source": "app-fixture:xcode-derived-data",
+    "in_app": true,
+    "in_app_evidence": "fixture"
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "path": "/Users/demo/Library/Caches/pip",
+    "section": "dev_cache",
+    "action": "removed",
+    "reason": null,
+    "size_bytes": 15728640
+  },
+  {
+    "path": "/Users/demo/.Trash/old-installer.dmg",
+    "section": "trash",
+    "action": "removed",
+    "reason": null,
+    "size_bytes": 1073741824
+  },
+  {
+    "path": "/Users/demo/Library/Caches/google/Chrome/Cache",
+    "section": "user_cache",
+    "action": "skipped",
+    "reason": "not_selected",
+    "size_bytes": 73400320
+  },
+  {
+    "path": "/Users/demo/Downloads/Example-1.2.3.dmg",
+    "section": "downloads",
+    "action": "skipped",
+    "reason": "not_selected",
+    "size_bytes": 209715200
+  },
+  {
+    "path": "/Users/demo/Library/Caches/com.apple.dyld",
+    "section": "system_cache",
+    "action": "skipped",
+    "reason": "needs_admin",
+    "size_bytes": 314572800
+  },
+  {
+    "path": "/Users/demo/Library/Logs/DiagnosticReports/Example-2026-11-01.ips",
+    "section": "logs",
+    "action": "failed",
+    "reason": "permission denied",
+    "size_bytes": 4096
+  }
+]

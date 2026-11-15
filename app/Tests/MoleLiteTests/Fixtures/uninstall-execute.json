@@ -1,0 +1,42 @@
+[
+  {
+    "app": "Slack",
+    "path": "/Users/demo/Applications/Slack.app",
+    "kind": "app",
+    "action": "trashed",
+    "reason": null,
+    "size_bytes": 268435456
+  },
+  {
+    "app": "Slack",
+    "path": "/Users/demo/Library/Application Support/Slack",
+    "kind": "app_support",
+    "action": "trashed",
+    "reason": null,
+    "size_bytes": 1288490188
+  },
+  {
+    "app": "Slack",
+    "path": "/Users/demo/Library/Caches/com.tinyspeck.slackmacgap",
+    "kind": "caches",
+    "action": "removed",
+    "reason": "trash unavailable, removed permanently",
+    "size_bytes": 52428800
+  },
+  {
+    "app": "Slack",
+    "path": "/Users/demo/Library/Preferences/com.tinyspeck.slackmacgap.plist",
+    "kind": "preferences",
+    "action": "skipped",
+    "reason": "not_selected",
+    "size_bytes": 8192
+  },
+  {
+    "app": "Slack",
+    "path": "/Users/demo/Library/LaunchAgents/com.tinyspeck.slackmacgap.plist",
+    "kind": "launch_agent",
+    "action": "failed",
+    "reason": "operation not permitted",
+    "size_bytes": 1024
+  }
+]
