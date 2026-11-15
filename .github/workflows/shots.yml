@@ -1,0 +1,48 @@
+name: mac-shots
+
+on:
+  push:
+    paths:
+      - '.github/workflows/shots.yml'
+  workflow_dispatch:
+
+jobs:
+  shots:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: engine/go.mod
+          cache: false
+      - name: 打包
+        run: |
+          mkdir -p out/shots out/logs
+          chmod +x app/scripts/build-app.sh engine/bin/*.sh || true
+          app/scripts/build-app.sh 2>&1 | tee out/logs/build-app.log
+          ls -la app/build
+      - name: 截图（只读预览，不执行删除）
+        if: always()
+        run: |
+          APP="$PWD/app/build/MoleLite.app"
+          shot() {
+            name=$1; wait=$2; shift 2
+            pkill -x MoleLite || true; sleep 1
+            open -n "$APP" --args -MoleLiteStartSection "$name" "$@" || echo "open 失败"
+            sleep "$wait"
+            osascript -e 'tell application "MoleLite" to activate' || true
+            sleep 2
+            screencapture -x "out/shots/$name.png" || echo "screencapture 失败: $name"
+          }
+          shot about 10
+          shot clean 90 -MoleLiteAutoScan 1
+          shot analyze 60
+          shot uninstall 60 -MoleLiteAutoScan 1
+          pkill -x MoleLite || true
+          ls -la out/shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: molelite-shots
+          path: out/
