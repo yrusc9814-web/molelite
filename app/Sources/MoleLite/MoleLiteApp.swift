@@ -39,8 +39,10 @@ struct MoleLiteApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(catalog: catalog)
+                .preferredColorScheme(.dark)
         }
-        .defaultSize(width: 1000, height: 680)
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1120, height: 760)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }
@@ -52,33 +54,54 @@ struct MoleLiteApp: App {
 struct RootView: View {
     let catalog: RulesCatalog
     /// 截图/调试用：启动参数 -MoleLiteStartSection <clean|analyze|uninstall|about> 选初始页。
-    @State private var selection: SidebarSection? =
+    @State private var selection: SidebarSection =
         SidebarSection(rawValue: UserDefaults.standard.string(forKey: "MoleLiteStartSection") ?? "") ?? .clean
-    /// 分析页状态放在主窗口层，切换侧边栏再回来不会重新扫描整个主目录。
+    /// 分析页状态放在主窗口层，切换页面再回来不会重新扫描整个主目录。
     @StateObject private var analyzeModel = AnalyzeViewModel()
 
+    private var palette: PagePalette {
+        switch selection {
+        case .clean: return .clean
+        case .analyze: return .analyze
+        case .uninstall: return .uninstall
+        case .about: return .about
+        }
+    }
+
     var body: some View {
-        NavigationSplitView {
-            List(SidebarSection.allCases, selection: $selection) { section in
-                Label(section.title, systemImage: section.systemImage)
-                    .tag(section)
-            }
-            .navigationSplitViewColumnWidth(min: 168, ideal: 188, max: 240)
-            .safeAreaInset(edge: .bottom) {
-                EngineStatusFooter()
-            }
-        } detail: {
-            switch selection ?? .clean {
-            case .clean:
-                CleanView(catalog: catalog)
-            case .analyze:
-                AnalyzeView(model: analyzeModel)
-            case .uninstall:
-                UninstallView(catalog: catalog)
-            case .about:
-                AboutView(catalog: catalog)
+        ZStack(alignment: .top) {
+            PageBackground(palette: palette)
+                .animation(.easeInOut(duration: 0.45), value: selection)
+
+            VStack(spacing: 0) {
+                TopNavBar(selection: $selection, accent: palette.accent)
+                    .padding(.top, 14)
+                    .padding(.bottom, 10)
+
+                ZStack {
+                    // 各页保持挂载，切换不丢状态；不可见的页不响应点击。
+                    CleanView(catalog: catalog)
+                        .opacity(selection == .clean ? 1 : 0)
+                        .allowsHitTesting(selection == .clean)
+                    if selection == .analyze {
+                        AnalyzeView(model: analyzeModel)
+                            .transition(.opacity)
+                    }
+                    UninstallView(catalog: catalog)
+                        .opacity(selection == .uninstall ? 1 : 0)
+                        .allowsHitTesting(selection == .uninstall)
+                    if selection == .about {
+                        AboutView(catalog: catalog)
+                            .scrollContentBackground(.hidden)
+                            .transition(.opacity)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(minWidth: 960, minHeight: 640)
+        .foregroundStyle(Color.white)
+        .tint(palette.accent)
     }
 }
 

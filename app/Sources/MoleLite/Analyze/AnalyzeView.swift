@@ -3,48 +3,37 @@ import SwiftUI
 
 // MARK: - 磁盘分析页
 
-/// 只读页面：可以下钻、返回上级、在 Finder 中显示，没有任何删除入口。
+/// 只读页面：左侧星球与目录清单，右侧矩形树图；可以下钻、返回上级、在 Finder 中显示，没有删除入口。
 struct AnalyzeView: View {
     @ObservedObject var model: AnalyzeViewModel
+    private let palette = PagePalette.analyze
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            content
-            Divider()
-            footer
+        HStack(spacing: 0) {
+            sidePanel
+                .frame(width: 280)
+            mainPanel
         }
-        .navigationTitle("磁盘分析")
         .onAppear {
             // 首次进入自动分析主目录；已有结果时不重复扫描。
-            // 用独立 Task 而不是 .task，切换侧边栏不会把正在跑的分析取消掉。
             guard !model.hasResult, model.phase == .idle, model.errorMessage == nil else { return }
             Task { await model.analyzeCurrent() }
         }
     }
 
-    // MARK: 顶部
+    // MARK: 左侧
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("磁盘占用")
-                        .font(.headline)
-                    Text(model.displayPath)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                        .help(model.currentPath)
-                }
-                Spacer()
-                if model.isAnalyzing {
-                    ProgressView().controlSize(.small)
-                    Button("取消") { model.cancel() }
-                } else {
+    private var sidePanel: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(spacing: 12) {
+                OrbView(palette: palette, size: 120, busy: model.isAnalyzing)
+                    .padding(.top, 6)
+                Text(model.hasResult
+                     ? "\(model.entries.count) 项，\(ByteFormat.string(model.totalSize))"
+                     : (model.isAnalyzing ? "正在统计…" : "尚未分析"))
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.8))
+                HStack(spacing: 6) {
                     Button {
                         model.chooseDirectory()
                     } label: {
@@ -53,154 +42,369 @@ struct AnalyzeView: View {
                     Button {
                         Task { await model.analyzeCurrent() }
                     } label: {
-                        Label("重新分析", systemImage: "arrow.clockwise")
+                        Image(systemName: "arrow.clockwise")
                     }
                 }
+                .buttonStyle(GhostButtonStyle())
+                .disabled(model.isAnalyzing)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 16)
+
+            Text("当前目录")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.7))
+                .padding(.horizontal, 22)
+                .padding(.bottom, 6)
+
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(model.sortedEntries) { entry in
+                        sideRow(entry)
+                    }
+                    if !model.sortedLargeFiles.isEmpty {
+                        Text("大文件")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.7))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 8)
+                            .padding(.top, 12)
+                            .padding(.bottom, 4)
+                        ForEach(model.sortedLargeFiles) { file in
+                            largeFileRow(file)
+                        }
+                    }
+                }
+                .padding(.horizontal, 14)
             }
 
-            HStack(spacing: 16) {
-                stat("总计", ByteFormat.string(model.totalSize))
-                if let files = model.totalFiles {
-                    stat("文件数", String(files))
-                }
-                if let status = model.scanStatusText {
-                    stat("状态", status)
-                }
-                if model.overview {
-                    Text("概览")
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.12), in: Capsule())
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
+            Text("只读 · 右键可在 Finder 中显示")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.white.opacity(0.35))
+                .padding(.horizontal, 22)
+                .padding(.vertical, 10)
+        }
+    }
+
+    private func sideRow(_ entry: AnalyzeEntry) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: entry.isDir ? "folder" : "doc")
+                .font(.system(size: 13))
+                .foregroundStyle(palette.accent.opacity(0.85))
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entryName(entry))
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                MetaText(ByteFormat.string(entry.size), opacity: 0.55)
+            }
+            Spacer()
+            if entry.isDir {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.35))
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if entry.isDir { Task { await model.drillDown(into: entry) } }
+        }
+        .contextMenu {
+            Button("在 Finder 中显示") { model.revealInFinder(entry.path) }
+            if entry.isDir {
+                Button("分析此目录") { Task { await model.drillDown(into: entry) } }
+            }
+        }
+    }
+
+    private func largeFileRow(_ file: AnalyzeFileEntry) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "doc.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.white.opacity(0.45))
+                .frame(width: 18)
+            Text(file.name.isEmpty ? (file.path as NSString).lastPathComponent : file.name)
+                .font(.system(size: 12))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer()
+            MetaText(ByteFormat.string(file.size), opacity: 0.55)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button("在 Finder 中显示") { model.revealInFinder(file.path) }
+        }
+    }
+
+    // MARK: 右侧
+
+    private var mainPanel: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
                 if model.canGoUp {
                     Button {
                         Task { await model.goUp() }
                     } label: {
-                        Label("返回上级", systemImage: "arrow.up.left")
+                        Image(systemName: "chevron.left")
                     }
+                    .buttonStyle(GhostButtonStyle())
                     .help("回到上一个分析过的目录")
                 }
+                breadcrumb
+                Spacer()
+                if let status = model.scanStatusText {
+                    MetaText(status, opacity: 0.55)
+                }
+                if let files = model.totalFiles {
+                    MetaText("文件 \(files)", opacity: 0.55)
+                }
+                MetaText("合计 \(ByteFormat.string(model.totalSize))", opacity: 0.55)
+                if model.isAnalyzing {
+                    ProgressView().controlSize(.small)
+                    Button("取消") { model.cancel() }
+                        .buttonStyle(GhostButtonStyle())
+                }
             }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
 
-    private func stat(_ title: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.callout.monospacedDigit())
-        }
-    }
-
-    // MARK: 主体
-
-    @ViewBuilder
-    private var content: some View {
-        if model.isAnalyzing && !model.hasResult {
-            VStack(spacing: 12) {
-                ProgressView()
-                Text("正在统计目录大小，文件多时会慢一些…")
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if !model.hasResult {
-            emptyState
-        } else {
-            resultList
-        }
-    }
-
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label("还没有分析结果", systemImage: "chart.pie")
-        } description: {
             if let message = model.errorMessage {
-                Text(message)
-            } else {
-                Text("选择目录后会调用引擎统计大小；这一页只读，不会改动任何文件。")
-            }
-        } actions: {
-            Button("分析当前目录") {
-                Task { await model.analyzeCurrent() }
-            }
-            .disabled(model.isAnalyzing)
-            Button("选择其他目录") {
-                model.chooseDirectory()
-            }
-            .disabled(model.isAnalyzing)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var resultList: some View {
-        List {
-            if let message = model.errorMessage {
-                Section {
-                    Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                }
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            Section("目录与文件（按大小排序）") {
-                if model.sortedEntries.isEmpty {
-                    Text("这个目录下没有可展示的条目。")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(model.sortedEntries) { entry in
-                    AnalyzeEntryRow(entry: entry, maxSize: model.maxEntrySize) {
-                        model.revealInFinder(entry.path)
-                    } onOpen: {
-                        Task { await model.drillDown(into: entry) }
-                    }
-                }
-            }
-
-            if !model.sortedLargeFiles.isEmpty {
-                Section("大文件") {
-                    ForEach(model.sortedLargeFiles) { file in
-                        AnalyzeLargeFileRow(file: file, maxSize: model.maxLargeFileSize) {
-                            model.revealInFinder(file.path)
+            ZStack {
+                if model.hasResult && !model.sortedEntries.isEmpty {
+                    TreemapView(entries: model.sortedEntries,
+                                total: max(model.totalSize, 1),
+                                onOpen: { entry in Task { await model.drillDown(into: entry) } },
+                                onReveal: { entry in model.revealInFinder(entry.path) })
+                } else {
+                    VStack(spacing: 10) {
+                        if model.isAnalyzing {
+                            ProgressView()
+                            MetaText("正在统计目录大小，文件多时会慢一些…", opacity: 0.6)
+                        } else {
+                            Image(systemName: "square.grid.3x3.square")
+                                .font(.system(size: 34))
+                                .foregroundStyle(Color.white.opacity(0.3))
+                            MetaText(model.hasResult ? "这个目录下没有可展示的条目" : "选择一个目录开始分析", opacity: 0.6)
+                            Button("分析主目录") { Task { await model.analyzeCurrent() } }
+                                .buttonStyle(CapsuleButtonStyle(minWidth: 160))
+                                .padding(.top, 6)
                         }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .card()
                 }
             }
         }
-        .listStyle(.inset)
+        .padding(.leading, 6)
+        .padding(.trailing, 24)
+        .padding(.bottom, 20)
     }
 
-    // MARK: 底部
-
-    private var footer: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "lock.shield")
-                .foregroundStyle(.secondary)
-            Text("只读分析，本页不提供删除；需要清理请到“清理”页。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
-            if let scannedAt = model.lastScannedAt {
-                Text("分析于 \(scannedAt.formatted(date: .omitted, time: .shortened))")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+    private var breadcrumb: some View {
+        let parts = model.displayPath.split(separator: "/").map(String.init)
+        return HStack(spacing: 6) {
+            ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+                if index > 0 {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.35))
+                }
+                Text(part == "~" ? "主目录" : part)
+                    .font(.system(size: 13, weight: index == parts.count - 1 ? .semibold : .regular))
+                    .foregroundStyle(Color.white.opacity(index == parts.count - 1 ? 0.95 : 0.55))
+                    .lineLimit(1)
             }
-            Button {
-                model.revealInFinder()
-            } label: {
-                Label("在 Finder 中显示", systemImage: "folder")
-            }
-            .disabled(model.isAnalyzing)
-            .help("在 Finder 中显示当前目录")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .help(model.currentPath)
+    }
+
+    private func entryName(_ entry: AnalyzeEntry) -> String {
+        entry.name.isEmpty ? (entry.path as NSString).lastPathComponent : entry.name
+    }
+}
+
+// MARK: - 矩形树图
+
+struct TreemapView: View {
+    let entries: [AnalyzeEntry]
+    let total: Int64
+    let onOpen: (AnalyzeEntry) -> Void
+    let onReveal: (AnalyzeEntry) -> Void
+
+    /// 最多画这么多块，剩下的合并成“其余 N 项”。
+    private let maxTiles = 11
+
+    private static let tileColors: [Color] = [
+        Color(red: 0.55, green: 0.42, blue: 0.35),
+        Color(red: 0.62, green: 0.36, blue: 0.25),
+        Color(red: 0.50, green: 0.43, blue: 0.47),
+        Color(red: 0.56, green: 0.44, blue: 0.26),
+        Color(red: 0.47, green: 0.38, blue: 0.30),
+        Color(red: 0.52, green: 0.45, blue: 0.48),
+        Color(red: 0.43, green: 0.36, blue: 0.30),
+        Color(red: 0.58, green: 0.40, blue: 0.32),
+        Color(red: 0.45, green: 0.40, blue: 0.42),
+        Color(red: 0.50, green: 0.40, blue: 0.24),
+        Color(red: 0.40, green: 0.34, blue: 0.29),
+        Color(red: 0.36, green: 0.31, blue: 0.27)
+    ]
+
+    private struct Tile: Identifiable {
+        let id: String
+        let title: String
+        let size: Int64
+        let entry: AnalyzeEntry?
+        let isRest: Bool
+    }
+
+    private var tiles: [Tile] {
+        let positive = entries.filter { $0.size > 0 }
+        var result = positive.prefix(maxTiles).map { entry in
+            Tile(id: entry.path,
+                 title: entry.name.isEmpty ? (entry.path as NSString).lastPathComponent : entry.name,
+                 size: entry.size, entry: entry, isRest: false)
+        }
+        let rest = positive.dropFirst(maxTiles)
+        if !rest.isEmpty {
+            let restSize = rest.reduce(Int64(0)) { $0 + $1.size }
+            result.append(Tile(id: "__rest__", title: "其余 \(rest.count) 项",
+                               size: restSize, entry: nil, isRest: true))
+        }
+        return result
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let items = tiles
+            let rects = Treemap.layout(values: items.map { Double($0.size) },
+                                       in: CGRect(origin: .zero, size: proxy.size))
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, tile in
+                    if index < rects.count {
+                        let rect = rects[index].insetBy(dx: 3, dy: 3)
+                        tileView(tile, color: Self.tileColors[index % Self.tileColors.count], rect: rect)
+                            .frame(width: max(rect.width, 0), height: max(rect.height, 0))
+                            .offset(x: rect.minX, y: rect.minY)
+                    }
+                }
+            }
+        }
+    }
+
+    private func tileView(_ tile: Tile, color: Color, rect: CGRect) -> some View {
+        let showText = rect.width > 70 && rect.height > 44
+        return ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(color)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(LinearGradient(colors: [Color.white.opacity(0.10), .clear],
+                                     startPoint: .top, endPoint: .bottom))
+            if showText {
+                VStack(spacing: 3) {
+                    HStack(spacing: 5) {
+                        Image(systemName: tile.isRest ? "square.grid.2x2" : ((tile.entry?.isDir ?? false) ? "folder" : "doc"))
+                            .font(.system(size: 12))
+                        Text(tile.title)
+                            .font(.system(size: 13, weight: .medium))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Text(ByteFormat.string(tile.size))
+                        .font(.system(size: 11, design: .monospaced))
+                        .opacity(0.8)
+                }
+                .foregroundStyle(Color.white.opacity(0.92))
+                .padding(6)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .help("\(tile.title) · \(ByteFormat.string(tile.size))")
+        .onTapGesture {
+            if let entry = tile.entry, entry.isDir { onOpen(entry) }
+        }
+        .contextMenu {
+            if let entry = tile.entry {
+                Button("在 Finder 中显示") { onReveal(entry) }
+                if entry.isDir {
+                    Button("分析此目录") { onOpen(entry) }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - squarified 布局
+
+enum Treemap {
+    /// 按 squarified 算法把 values（降序）铺进 rect，返回同顺序的矩形。
+    static func layout(values: [Double], in rect: CGRect) -> [CGRect] {
+        let total = values.reduce(0, +)
+        guard total > 0, rect.width > 0, rect.height > 0 else {
+            return values.map { _ in .zero }
+        }
+        let scale = Double(rect.width * rect.height) / total
+        let areas = values.map { $0 * scale }
+        var result = [CGRect](repeating: .zero, count: values.count)
+        var remaining = rect
+        var index = 0
+
+        while index < areas.count {
+            let side = Double(min(remaining.width, remaining.height))
+            var row: [Int] = [index]
+            var rowSum = areas[index]
+            var best = worst(rowSum: rowSum, rowMin: areas[index], rowMax: areas[index], side: side)
+            var next = index + 1
+            while next < areas.count {
+                let newSum = rowSum + areas[next]
+                let newMin = min(areas[row.last!], areas[next])
+                let newMax = areas[row.first!]
+                let candidate = worst(rowSum: newSum, rowMin: newMin, rowMax: newMax, side: side)
+                if candidate > best { break }
+                row.append(next)
+                rowSum = newSum
+                best = candidate
+                next += 1
+            }
+
+            let horizontal = remaining.width >= remaining.height
+            let thickness = CGFloat(rowSum / side)
+            var offset: CGFloat = 0
+            for i in row {
+                let length = CGFloat(areas[i] / Double(thickness))
+                if horizontal {
+                    result[i] = CGRect(x: remaining.minX, y: remaining.minY + offset,
+                                       width: thickness, height: length)
+                } else {
+                    result[i] = CGRect(x: remaining.minX + offset, y: remaining.minY,
+                                       width: length, height: thickness)
+                }
+                offset += length
+            }
+            if horizontal {
+                remaining = CGRect(x: remaining.minX + thickness, y: remaining.minY,
+                                   width: max(remaining.width - thickness, 0), height: remaining.height)
+            } else {
+                remaining = CGRect(x: remaining.minX, y: remaining.minY + thickness,
+                                   width: remaining.width, height: max(remaining.height - thickness, 0))
+            }
+            index = next
+        }
+        return result
+    }
+
+    private static func worst(rowSum: Double, rowMin: Double, rowMax: Double, side: Double) -> Double {
+        guard rowSum > 0, rowMin > 0, side > 0 else { return .infinity }
+        let s2 = side * side
+        let r2 = rowSum * rowSum
+        return max(s2 * rowMax / r2, r2 / (s2 * rowMin))
     }
 }
