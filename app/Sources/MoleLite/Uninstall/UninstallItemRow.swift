@@ -31,46 +31,44 @@ struct UninstallItemRow: View {
     let item: UninstallPreviewItem
     let isSelected: Bool
     let disabled: Bool
-    var tint: Color = .accentColor
     let onToggle: (Bool) -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            CheckBox(isOn: isSelected, tint: tint, disabled: disabled || item.needsAdmin) {
-                onToggle(!isSelected)
+        HStack(alignment: .top, spacing: 10) {
+            Toggle("", isOn: Binding(get: { isSelected }, set: onToggle))
+                .labelsHidden()
+                .toggleStyle(.checkbox)
+                .disabled(disabled || item.needsAdmin)
+                .help(item.needsAdmin ? "需要管理员权限，本版本不执行" : "")
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.displayName)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundStyle(item.needsAdmin ? Color.secondary : Color.primary)
+                Text(item.path)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                HStack(spacing: 6) {
+                    RiskBadge(level: item.riskLevel)
+                    if item.needsAdmin {
+                        Label("需管理员", systemImage: "lock.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+                }
             }
-            .help(item.needsAdmin ? "需要管理员权限，本版本不执行" : "")
-
-            Text(item.displayName)
-                .font(.system(size: 12, weight: .semibold))
-                .lineLimit(1)
-                .frame(width: 150, alignment: .leading)
-
-            Text((item.path as NSString).abbreviatingWithTildeInPath)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.5))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
 
             Spacer(minLength: 8)
 
-            if item.needsAdmin {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 9))
-                    .foregroundStyle(Color.orange)
-            }
-            RiskBadge(level: item.riskLevel)
             Text(ByteFormat.string(item.sizeBytes))
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(Color.white.opacity(0.65))
-                .frame(minWidth: 70, alignment: .trailing)
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 5)
-        .opacity(item.needsAdmin ? 0.55 : 1)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if !(disabled || item.needsAdmin) { onToggle(!isSelected) }
-        }
+        .padding(.vertical, 3)
+        .opacity(item.needsAdmin ? 0.65 : 1)
     }
 }

@@ -2,56 +2,29 @@ import SwiftUI
 
 // MARK: - 卸载页
 
-/// 一张应用清单：点开某个应用就地展开它的本体与残留，勾选后在底栏确认移到废纸篓。
 struct UninstallView: View {
     @StateObject private var model: UninstallViewModel
     @State private var query = ""
     @State private var showConfirm = false
-
-    private let palette = PagePalette.uninstall
 
     init(catalog: RulesCatalog) {
         _model = StateObject(wrappedValue: UninstallViewModel(catalog: catalog))
     }
 
     var body: some View {
-        ZStack {
-            if let summary = model.resultSummary {
-                UninstallResultView(
-                    appName: model.executedAppName,
-                    summary: summary,
-                    note: model.errorMessage,
-                    logLines: model.logLines
-                ) {
-                    model.finishResult()
-                }
-                .scrollContentBackground(.hidden)
-                .transition(.opacity)
-            } else {
-                VStack(spacing: 0) {
-                    toolbar
-                    appList
-                    if model.selectedApp != nil {
-                        bottomBar
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
-            }
+        HStack(spacing: 0) {
+            appColumn
+            Divider()
+            detailColumn
         }
-        .animation(.easeInOut(duration: 0.25), value: model.selectedApp?.id)
+        .navigationTitle("卸载")
         .onAppear {
             model.reloadApps()
-            // 截图/调试用：-MoleLiteAutoScan 1 且起始页是卸载时，自动选中一个应用并预览（只读 dry-run）。
+            // 截图/调试用：-MoleLiteAutoScan 1 时自动选中一个应用并预览（只读 dry-run，不卸载）。
             // -MoleLiteAutoApp <名字> 指定应用，默认取列表第一个。
-            let defaults = UserDefaults.standard
-            if defaults.bool(forKey: "MoleLiteAutoScan"),
-               defaults.string(forKey: "MoleLiteStartSection") == "uninstall",
-               model.selectedApp == nil {
-                let wanted = defaults.string(forKey: "MoleLiteAutoApp")
-                let pick = model.apps.first { app in
-                    guard let wanted else { return false }
-                    return app.name.localizedCaseInsensitiveContains(wanted)
-                } ?? model.apps.first
+            if UserDefaults.standard.bool(forKey: "MoleLiteAutoScan"), model.selectedApp == nil {
+                let wanted = UserDefaults.standard.string(forKey: "MoleLiteAutoApp")
+                let pick = model.apps.first { wanted != nil && $0.name.localizedCaseInsensitiveContains(wanted!) } ?? model.apps.first
                 if let pick { model.select(pick) }
             }
         }
@@ -65,246 +38,253 @@ struct UninstallView: View {
         }
     }
 
-    // MARK: 顶部工具栏
+    // MARK: 左栏：应用列表
 
-    private var toolbar: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.white.opacity(0.45))
-                TextField("搜索应用或 Bundle ID", text: $query)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                if !query.isEmpty {
+    private var appColumn: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("搜索应用或 Bundle ID", text: $query)
+                        .textFieldStyle(.plain)
+                    if !query.isEmpty {
+                        Button {
+                            query = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(6)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+
+                HStack {
+                    Text("\(visibleApps.count) 个应用")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
                     Button {
-                        query = ""
+                        model.reloadApps()
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(Color.white.opacity(0.45))
+                        Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(.plain)
+                    .help("重新扫描 /Applications 与 ~/Applications")
+                    .disabled(model.isExecuting || model.isPreviewing)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .frame(maxWidth: 320)
-            .background(Capsule().fill(Color.white.opacity(0.07)))
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.08)))
+            .padding(12)
 
-            Spacer()
+            Divider()
 
-            HStack(spacing: 4) {
-                Text("已安装应用")
-                    .font(.system(size: 12, weight: .semibold))
-                MetaText("\(visibleApps.count) 个")
+            if visibleApps.isEmpty {
+                ContentUnavailableView {
+                    Label(query.isEmpty ? "没有找到应用" : "没有匹配的应用",
+                          systemImage: "square.grid.2x2")
+                } description: {
+                    Text(query.isEmpty
+                         ? "只列出 /Applications 与 ~/Applications 下的 .app。"
+                         : "换个关键词，或清空搜索。")
+                }
+                .frame(maxHeight: .infinity)
+            } else {
+                List(selection: Binding(
+                    get: { model.selectedApp?.id },
+                    set: { id in
+                        model.select(visibleApps.first { $0.id == id })
+                    }
+                )) {
+                    ForEach(visibleApps) { app in
+                        InstalledAppRow(app: app)
+                            .tag(app.id)
+                    }
+                }
+                .listStyle(.sidebar)
             }
-
-            Button {
-                model.reloadApps()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(GhostButtonStyle())
-            .help("重新扫描 /Applications 与 ~/Applications")
-            .disabled(model.isExecuting || model.isPreviewing)
         }
-        .padding(.horizontal, 28)
-        .padding(.vertical, 10)
+        .frame(minWidth: 240, idealWidth: 268, maxWidth: 340)
+        .disabled(model.isExecuting)
     }
-
-    // MARK: 应用清单
 
     private var visibleApps: [InstalledApp] {
         model.filteredApps(query: query)
     }
 
+    // MARK: 右栏
+
     @ViewBuilder
-    private var appList: some View {
-        if visibleApps.isEmpty {
-            VStack(spacing: 10) {
-                Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 30))
-                    .foregroundStyle(Color.white.opacity(0.3))
-                Text(query.isEmpty ? "没有找到应用" : "没有匹配的应用")
-                    .font(.system(size: 14, weight: .semibold))
-                MetaText(query.isEmpty ? "只列出 /Applications 与 ~/Applications 下的 .app" : "换个关键词，或清空搜索")
+    private var detailColumn: some View {
+        if let summary = model.resultSummary {
+            UninstallResultView(
+                appName: model.executedAppName,
+                summary: summary,
+                note: model.errorMessage,
+                logLines: model.logLines
+            ) {
+                model.finishResult()
+            }
+        } else if let app = model.selectedApp {
+            VStack(spacing: 0) {
+                previewHeader(app)
+                Divider()
+                previewBody
+                if model.hasPreview {
+                    Divider()
+                    footer
+                }
+            }
+        } else {
+            ContentUnavailableView {
+                Label("选择一个应用", systemImage: "trash")
+            } description: {
+                Text("从左侧选一个应用，先预览应用本体与残留文件，确认后再移到废纸篓。")
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func previewHeader(_ app: InstalledApp) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(app.name)
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(1)
+                Text(app.bundleID ?? app.path)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            Spacer()
+            if model.isPreviewing {
+                ProgressView().controlSize(.small)
+                Button("取消") { model.cancel() }
+            } else {
+                Button(model.hasPreview ? "重新预览" : "预览") {
+                    Task { await model.loadPreview() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.isExecuting)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    @ViewBuilder
+    private var previewBody: some View {
+        if model.isPreviewing && model.items.isEmpty {
+            VStack(spacing: 12) {
+                ProgressView()
+                Text("正在查找应用与残留文件…")
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.items.isEmpty {
+            ContentUnavailableView {
+                Label("还没有预览", systemImage: "doc.text.magnifyingglass")
+            } description: {
+                if let message = model.errorMessage {
+                    Text(message)
+                } else {
+                    Text("预览只会读取文件列表，不会改动任何东西。")
+                }
+            } actions: {
+                Button("开始预览") {
+                    Task { await model.loadPreview() }
+                }
+                .disabled(model.isPreviewing)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ScrollView {
-                LazyVStack(spacing: 4) {
-                    ForEach(visibleApps) { app in
-                        appRow(app)
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 12)
-            }
-        }
-    }
-
-    private func appRow(_ app: InstalledApp) -> some View {
-        let isOpen = model.selectedApp?.id == app.id
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 14) {
-                Image(nsImage: AppIconCache.icon(for: app.path))
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: 38, height: 38)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(app.name)
-                        .font(.system(size: 14, weight: .semibold))
-                        .lineLimit(1)
-                    MetaText(app.bundleID ?? (app.path as NSString).abbreviatingWithTildeInPath)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-
-                Spacer()
-
-                if isOpen {
-                    if model.isPreviewing {
-                        ProgressView().controlSize(.small)
-                        MetaText("正在查找残留…", opacity: 0.6)
-                    } else if model.hasPreview {
-                        MetaText("共 \(model.items.count) 项 · 已选 \(ByteFormat.string(model.selectedBytes))", opacity: 0.7)
-                    }
-                }
-
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.4))
-                    .rotationEffect(.degrees(isOpen ? 0 : -90))
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                guard !model.isExecuting, !model.isPreviewing else { return }
-                model.select(isOpen ? nil : app)
-            }
-
-            if isOpen {
-                detail
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 12)
-            }
-        }
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(isOpen ? 0.07 : 0.0))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.white.opacity(isOpen ? 0.10 : 0.0))
-        )
-    }
-
-    // MARK: 展开后的明细
-
-    @ViewBuilder
-    private var detail: some View {
-        if model.isPreviewing && model.items.isEmpty {
-            HStack(spacing: 10) {
-                ProgressView().controlSize(.small)
-                MetaText("正在读取应用本体与残留文件，只读不改动…", opacity: 0.6)
-            }
-            .padding(.vertical, 12)
-        } else if model.items.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            List {
                 if let message = model.errorMessage {
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.orange)
-                }
-                Button("重新预览") { Task { await model.loadPreview() } }
-                    .buttonStyle(GhostButtonStyle())
-            }
-            .padding(.vertical, 8)
-        } else {
-            VStack(alignment: .leading, spacing: 10) {
-                if let message = model.errorMessage {
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.orange)
+                    Section {
+                        Label(message, systemImage: "exclamationmark.triangle")
+                            .font(.callout)
+                            .foregroundStyle(.orange)
+                    }
                 }
                 if !model.appBundleItems.isEmpty {
-                    groupBlock(title: "应用本体", items: model.appBundleItems)
+                    Section("应用本体") {
+                        ForEach(model.appBundleItems) { item in
+                            UninstallItemRow(
+                                item: item,
+                                isSelected: model.isSelected(item),
+                                disabled: model.isExecuting || model.isPreviewing,
+                                onToggle: { model.setSelected(item, $0) }
+                            )
+                        }
+                    }
                 }
-                if model.leftoverGroups.isEmpty {
-                    MetaText("没有发现残留文件。")
-                } else {
+                Section("残留文件") {
+                    if model.leftoverGroups.isEmpty {
+                        Text("没有发现残留文件。")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
                     ForEach(model.leftoverGroups) { group in
-                        groupBlock(title: group.title, items: group.items)
+                        DisclosureGroup {
+                            ForEach(group.items) { item in
+                                UninstallItemRow(
+                                    item: item,
+                                    isSelected: model.isSelected(item),
+                                    disabled: model.isExecuting || model.isPreviewing,
+                                    onToggle: { model.setSelected(item, $0) }
+                                )
+                            }
+                        } label: {
+                            HStack {
+                                Text(group.title)
+                                Spacer()
+                                Text("\(group.items.count) 项 · \(ByteFormat.string(group.totalBytes))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }
+            .listStyle(.inset)
         }
     }
 
-    private func groupBlock(title: String, items: [UninstallPreviewItem]) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.8))
-                Spacer()
-                MetaText("\(items.count) 项 · \(ByteFormat.string(items.reduce(Int64(0)) { $0 + $1.sizeBytes }))")
-            }
-            .padding(.top, 6)
-            .padding(.bottom, 2)
+    // MARK: 底部
 
-            ForEach(items) { item in
-                UninstallItemRow(
-                    item: item,
-                    isSelected: model.isSelected(item),
-                    disabled: model.isExecuting || model.isPreviewing,
-                    tint: palette.accent,
-                    onToggle: { model.setSelected(item, $0) }
-                )
-            }
-        }
-    }
+    private var footer: some View {
+        HStack(spacing: 12) {
+            Toggle("全选", isOn: Binding(
+                get: {
+                    !model.selectableItems.isEmpty
+                        && model.selectedItems.count == model.selectableItems.count
+                },
+                set: { model.selectAll($0) }
+            ))
+            .toggleStyle(.checkbox)
+            .disabled(model.isExecuting || model.isPreviewing)
 
-    // MARK: 底栏
+            Text(model.selectionSummary)
+                .font(.callout)
+                .foregroundStyle(.secondary)
 
-    private var bottomBar: some View {
-        BottomBar {
-            if let app = model.selectedApp {
-                Image(nsImage: AppIconCache.icon(for: app.path))
-                    .resizable()
-                    .frame(width: 26, height: 26)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.hasPreview ? "已选 \(model.selectedItems.count) 项 · \(ByteFormat.string(model.selectedBytes))" : "等待预览")
-                    .font(.system(size: 13, weight: .semibold))
-                MetaText("移到废纸篓，可以从废纸篓恢复", opacity: 0.55)
-            }
-            if model.hasPreview {
-                Button(allSelected ? "全部取消" : "全选") {
-                    model.selectAll(!allSelected)
-                }
-                .buttonStyle(LinkButtonStyle(color: palette.accent))
-                .disabled(model.isExecuting || model.isPreviewing)
-            }
             Spacer()
-            if model.isExecuting || model.isPreviewing {
+
+            if model.isExecuting {
                 ProgressView().controlSize(.small)
                 Button("取消") { model.cancel() }
-                    .buttonStyle(GhostButtonStyle())
             }
-            Button("卸载 \(model.selectedItems.count) 项") {
+
+            Button("卸载所选") {
                 showConfirm = true
             }
-            .buttonStyle(CapsuleButtonStyle(minWidth: 180))
+            .buttonStyle(.borderedProminent)
             .disabled(!model.canExecute)
+            .help(model.canExecute ? "确认后把勾选的项目移到废纸篓" : "先预览并勾选至少一项")
         }
-    }
-
-    private var allSelected: Bool {
-        !model.selectableItems.isEmpty && model.selectedItems.count == model.selectableItems.count
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 
     private var confirmationMessage: String {
