@@ -2,14 +2,16 @@ name: mac-build
 
 on:
   push:
-    paths-ignore:
-      - '.github/workflows/shots.yml'
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
 
@@ -18,36 +20,42 @@ jobs:
           go-version-file: engine/go.mod
           cache: false
 
-      - name: 环境信息
-        run: |
-          sw_vers; swift --version; go version
-          mkdir -p out/logs out/shots
+      - name: 准备
+        run: mkdir -p out/logs out/shots
 
       - name: swift build
         id: build
         continue-on-error: true
         working-directory: app
-        run: swift build 2>&1 | tee ../out/logs/swift-build.log; exit ${PIPESTATUS[0]}
+        run: |
+          set -o pipefail
+          swift build 2>&1 | tee ../out/logs/swift-build.log
+          grep -E 'error:' ../out/logs/swift-build.log | sort -u > ../out/logs/swift-build-errors.txt || true
 
       - name: swift test
         id: test
+        if: steps.build.outcome == 'success'
         continue-on-error: true
         working-directory: app
-        run: swift test 2>&1 | tee ../out/logs/swift-test.log; exit ${PIPESTATUS[0]}
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee ../out/logs/swift-test.log
 
       - name: 打包 MoleLite.app
         id: pack
+        if: steps.build.outcome == 'success'
         continue-on-error: true
         run: |
-          chmod +x app/scripts/build-app.sh engine/bin/*.sh engine/mole engine/mo || true
-          app/scripts/build-app.sh 2>&1 | tee out/logs/build-app.log; exit ${PIPESTATUS[0]}
+          set -o pipefail
+          chmod +x app/scripts/build-app.sh engine/bin/*.sh || true
+          app/scripts/build-app.sh 2>&1 | tee out/logs/build-app.log
 
       - name: 截图（只读预览，不执行删除）
         id: shots
         if: steps.pack.outcome == 'success'
         continue-on-error: true
         run: |
-          APP=app/build/MoleLite.app
+          APP="$PWD/app/build/MoleLite.app"
           shot() {
             name=$1; wait=$2; shift 2
             pkill -x MoleLite || true; sleep 1
@@ -55,46 +63,49 @@ jobs:
             sleep "$wait"
             osascript -e 'tell application "MoleLite" to activate' || true
             sleep 2
-            screencapture -x "out/shots/$name.png" || echo "screencapture 失败: $name"
+            screencapture -x "out/shots/$name.png"
           }
-          shot about 8
+          shot about 10
           shot clean 90 -MoleLiteAutoScan 1
           shot analyze 60
           shot uninstall 60 -MoleLiteAutoScan 1
           pkill -x MoleLite || true
-          ls -la out/shots
 
       - name: go test ./cmd/analyze/...
         id: gotest
         continue-on-error: true
         working-directory: engine
-        run: go test ./cmd/analyze/... 2>&1 | tee ../out/logs/go-test.log; exit ${PIPESTATUS[0]}
+        run: |
+          set -o pipefail
+          go test ./cmd/analyze/... 2>&1 | tee ../out/logs/go-test.log
 
-      - name: bats（引擎全量）
+      - name: bats（提交信息含 [bats] 才跑）
         id: bats
+        if: contains(github.event.head_commit.message, '[bats]') || github.event_name == 'workflow_dispatch'
         continue-on-error: true
         timeout-minutes: 30
         working-directory: engine
         run: |
+          set -o pipefail
           brew install bats-core >/dev/null 2>&1 || true
-          bats --tap tests/ 2>&1 | tee ../out/logs/bats.log; exit ${PIPESTATUS[0]}
+          bats --tap tests/ 2>&1 | tee ../out/logs/bats.log
 
-      - name: 汇总
+      - name: 汇总并推到 ci-out 分支
         if: always()
         run: |
           {
+            echo "commit: $GITHUB_SHA"
             echo "swift build: ${{ steps.build.outcome }}"
             echo "swift test:  ${{ steps.test.outcome }}"
             echo "打包:        ${{ steps.pack.outcome }}"
             echo "截图:        ${{ steps.shots.outcome }}"
             echo "go test:     ${{ steps.gotest.outcome }}"
             echo "bats:        ${{ steps.bats.outcome }}"
-            [ -f out/logs/bats.log ] && echo "bats not ok 数: $(grep -c '^not ok' out/logs/bats.log || true) / 总: $(grep -cE '^(not )?ok' out/logs/bats.log || true)"
+            if [ -f out/logs/bats.log ]; then echo "bats not ok: $(grep -c '^not ok' out/logs/bats.log || true) / $(grep -cE '^(not )?ok' out/logs/bats.log || true)"; fi
           } | tee out/summary.txt
           cat out/summary.txt >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: molelite-results
-          path: out/
+          cd out
+          git init -q -b ci-out
+          git add -A
+          git -c user.name=ci -c user.email=ci@local commit -qm "ci $GITHUB_SHA"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-out

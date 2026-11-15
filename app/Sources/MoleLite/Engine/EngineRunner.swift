@@ -425,8 +425,8 @@ public final class EngineRunner: @unchecked Sendable {
                         timeoutBox.item?.cancel()
 
                         // 子进程结束后把管道里剩余内容取干净；有超时保护，不无限等。
-                        drain(stdoutPipe.fileHandleForReading, into: stdoutBuffer)
-                        drain(stderrPipe.fileHandleForReading, into: stderrBuffer)
+                        self.drain(stdoutPipe.fileHandleForReading, into: stdoutBuffer)
+                        self.drain(stderrPipe.fileHandleForReading, into: stderrBuffer)
                         stderrBuffer.flushPendingLine()
 
                         self.stateLock.lock()
@@ -515,9 +515,6 @@ public final class EngineRunner: @unchecked Sendable {
                 self.cancel()
             }
         )
-
-        let startedAt = Date() // 占位，实际时间在下面重算
-        _ = startedAt
 
         if invocation.cancelled {
             throw CancellationError()

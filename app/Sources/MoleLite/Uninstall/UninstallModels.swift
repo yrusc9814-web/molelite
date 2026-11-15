@@ -66,7 +66,8 @@ public struct UninstallResultSummary {
     public var isEmpty: Bool { trashed.isEmpty && removed.isEmpty && skipped.isEmpty && failed.isEmpty }
 
     public var headline: String {
-        "移到废纸篓 \(trashed.count) 项（\(ByteFormat.string(bytes(of: trashed))）），"
+        let trashedSize = ByteFormat.string(bytes(of: trashed))
+        return "移到废纸篓 \(trashed.count) 项（\(trashedSize)），"
             + "永久删除 \(removed.count) 项，跳过 \(skipped.count) 项，失败 \(failed.count) 项。"
     }
 
