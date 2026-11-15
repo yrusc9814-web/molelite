@@ -191,8 +191,8 @@ final class RulesCatalogTests: XCTestCase {
 
         XCTAssertEqual(applied.items.count, items.count)
         XCTAssertEqual(applied.items.map(\.path), items.map(\.path))
-        // 样本里的 rule_id 都不在 rules-sample 中，所以全部保持原样。
-        XCTAssertEqual(applied.items, items)
+        // 样本里的 rule_id 都不在 rules-sample 中，所以除最后追加的那条外全部保持原样。
+        XCTAssertEqual(Array(applied.items.dropLast()), Array(items.dropLast()))
 
         // 追加的条目命中 xcode-derived-data：false→true、true→false、high→low。
         let derived = try XCTUnwrap(applied.items.last)

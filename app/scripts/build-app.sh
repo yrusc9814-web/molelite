@@ -70,7 +70,7 @@ command -v codesign >/dev/null 2>&1 || die "找不到 codesign（随 Xcode 命�
 
 # ---------- 1. 编译 ----------
 
-log "swift build -c release（$APP_DIR）"
+log "swift build -c release（${APP_DIR}）"
 ( cd "$APP_DIR" && swift build -c release )
 
 BIN_PATH="$( cd "$APP_DIR" && swift build -c release --show-bin-path )"
@@ -199,7 +199,7 @@ codesign --verify --deep --strict "$BUNDLE" || die "签名校验失败"
 # ---------- 7. 收尾 ----------
 
 SIZE="$(du -sh "$BUNDLE" | cut -f1)"
-log "完成：$BUNDLE（$SIZE）"
+log "完成：${BUNDLE}（${SIZE}）"
 log "试运行：open \"$BUNDLE\""
 if [ ! -x "$ENGINE_DEST/bin/analyze-go" ]; then
     warn "包内没有 analyze-go，磁盘分析页不可用（清理/卸载不受影响）。"
