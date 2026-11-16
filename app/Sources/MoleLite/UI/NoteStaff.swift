@@ -68,20 +68,14 @@ struct StaffPhrase {
         ])
     }()
 
-    // 卸载：一句下行乐句，最后落在一个二分音符上
+    // 卸载：一步一步往下走的四分音符（不连杠），最后落在一个二分长音上
     static let uninstall: StaffPhrase = {
-        var e: [StaffElement] = [.glyph(.treble, x: 25, pitch: 2), .glyph(.flat, x: 92, pitch: 7)]
-        let xs: [Double] = [115, 150, 185, 220, 280, 315, 350, 385]
-        let ps = [9, 8, 7, 6, 7, 6, 5, 4]
-        for (x, p) in zip(xs, ps) { e.append(.note(x, [p], up: false)) }
-        e.append(.glyph(.natural, x: 430, pitch: 3))
-        e.append(.note(450, [3], up: true))
-        e.append(.note(490, [1], up: true))
-        e.append(.note(535, [0], up: true, open: true))
-        // 0 谱号，1 降号，2-5，6-9，10 还原号，11-12，13 二分音符
-        return StaffPhrase(elements: e, beams: [
-            StaffBeam(from: 2, to: 5), StaffBeam(from: 6, to: 9, count: 2), StaffBeam(from: 11, to: 12)
-        ])
+        var e: [StaffElement] = [.glyph(.treble, x: 30, pitch: 2), .glyph(.flat, x: 95, pitch: 7)]
+        let xs: [Double] = [150, 195, 240, 285, 330, 375, 420, 465]
+        let ps = [10, 9, 8, 7, 8, 6, 5, 4]
+        for (x, p) in zip(xs, ps) { e.append(.note(x, [p], up: p < 6)) }
+        e.append(.note(530, [2], up: true, open: true))
+        return StaffPhrase(elements: e)
     }()
 
     /// 关于：一句短短的起伏乐句

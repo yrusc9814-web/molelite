@@ -18,6 +18,11 @@ struct AnalyzeView: View {
         HStack(spacing: 0) {
             sidePanel
                 .frame(width: 280)
+                .background(Color(red: 0.08, green: 0.05, blue: 0.16).opacity(0.28))
+                .background(.ultraThinMaterial.opacity(0.35))
+                .overlay(alignment: .trailing) {
+                    Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1)
+                }
             mainPanel
         }
         .onAppear {
@@ -99,7 +104,7 @@ struct AnalyzeView: View {
         HStack(spacing: 10) {
             Image(systemName: entry.isDir ? "folder" : "doc")
                 .font(.system(size: 13))
-                .foregroundStyle(palette.accent.opacity(0.85))
+                .foregroundStyle(Color.white.opacity(0.75))
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 1) {
                 Text(entryName(entry))
@@ -252,21 +257,9 @@ struct TreemapView: View {
     /// 最多画这么多块，剩下的合并成“其余 N 项”。
     private let maxTiles = 11
 
-    /// 跟分析页极光一致的青绿色系，深浅错开，半透明叠在背景上。
-    private static let tileColors: [Color] = [
-        Color(red: 0.16, green: 0.46, blue: 0.50),
-        Color(red: 0.20, green: 0.52, blue: 0.42),
-        Color(red: 0.18, green: 0.38, blue: 0.52),
-        Color(red: 0.26, green: 0.50, blue: 0.48),
-        Color(red: 0.14, green: 0.40, blue: 0.40),
-        Color(red: 0.24, green: 0.44, blue: 0.56),
-        Color(red: 0.18, green: 0.46, blue: 0.36),
-        Color(red: 0.22, green: 0.36, blue: 0.46),
-        Color(red: 0.15, green: 0.34, blue: 0.38),
-        Color(red: 0.26, green: 0.42, blue: 0.40),
-        Color(red: 0.14, green: 0.30, blue: 0.36),
-        Color(red: 0.12, green: 0.26, blue: 0.30)
-    ]
+    /// 白色磨砂半透明块，只分深浅（不加别的颜色），叠在紫色星空上。
+    private static let tileColors: [Color] = [0.13, 0.12, 0.11, 0.10, 0.095, 0.09, 0.085, 0.08, 0.075, 0.07, 0.065, 0.06]
+        .map { Color(red: 0.92, green: 0.88, blue: 1.0).opacity($0) }
 
     private struct Tile: Identifiable {
         let id: String
@@ -313,11 +306,12 @@ struct TreemapView: View {
     private func tileView(_ tile: Tile, color: Color, rect: CGRect) -> some View {
         let showText = rect.width > 70 && rect.height > 44
         return ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.ultraThinMaterial.opacity(0.22))
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(color)
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(LinearGradient(colors: [Color.white.opacity(0.10), .clear],
-                                     startPoint: .top, endPoint: .bottom))
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.30), lineWidth: 1)
             if showText {
                 VStack(spacing: 3) {
                     HStack(spacing: 5) {
@@ -329,14 +323,14 @@ struct TreemapView: View {
                             .truncationMode(.middle)
                     }
                     Text(ByteFormat.string(tile.size))
-                        .font(.system(size: 11, design: .monospaced))
-                        .opacity(0.8)
+                        .font(Typo.numeral(15))
+                        .opacity(0.88)
                 }
                 .foregroundStyle(Color.white.opacity(0.92))
                 .padding(6)
             }
         }
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .help("\(tile.title) · \(ByteFormat.string(tile.size))")
         .onTapGesture {
             if let entry = tile.entry, entry.isDir { onOpen(entry) }

@@ -2,69 +2,44 @@ import AppKit
 import CoreText
 import SwiftUI
 
-// MARK: - 页面配色
+// MARK: - 页面背景
 
-/// 每个页面一套深色底 + 两条极光丝带（同一种形式，配色各不相同，切页不视觉疲劳）。
+/// 每页一种“天色”：清理=极光丝带，卸载=暮色晚霞，磁盘分析=紫色星空+幻彩涟漪，关于=金色月晕薄雾。
+enum PageScene: Equatable { case aurora, dusk, ripple, moon }
+
 struct PagePalette: Equatable {
-    let top: Color
-    let bottom: Color
-    /// 第一条丝带：左端色 → 右端色
-    let ribbonA: (Color, Color)
-    /// 第二条丝带
-    let ribbonB: (Color, Color)
+    let scene: PageScene
     let accent: Color
 
-    static func == (l: PagePalette, r: PagePalette) -> Bool { l.top == r.top && l.bottom == r.bottom }
+    static func == (l: PagePalette, r: PagePalette) -> Bool { l.scene == r.scene }
 
-    private static func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color {
+    static func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color {
         Color(red: r / 255, green: g / 255, blue: b / 255)
     }
 
-    /// 清理：深海军蓝底，蓝紫 → 淡粉
-    static let clean = PagePalette(
-        top: rgb(26, 30, 60), bottom: rgb(12, 13, 28),
-        ribbonA: (rgb(110, 140, 240), rgb(200, 150, 220)),
-        ribbonB: (rgb(140, 120, 230), rgb(230, 170, 200)),
-        accent: rgb(150, 170, 255))
-
-    /// 卸载：深梅紫底，紫 → 蜜桃（不用红）
-    static let uninstall = PagePalette(
-        top: rgb(34, 24, 56), bottom: rgb(14, 10, 26),
-        ribbonA: (rgb(170, 110, 220), rgb(250, 170, 140)),
-        ribbonB: (rgb(200, 130, 210), rgb(255, 200, 160)),
-        accent: rgb(250, 180, 150))
-
-    /// 磁盘分析：深青底，青 → 翠绿
-    static let analyze = PagePalette(
-        top: rgb(12, 40, 48), bottom: rgb(6, 16, 22),
-        ribbonA: (rgb(60, 190, 200), rgb(90, 220, 150)),
-        ribbonB: (rgb(70, 160, 210), rgb(140, 230, 180)),
-        accent: rgb(110, 225, 190))
-
-    /// 关于：深靛底，淡金 → 淡紫
-    static let about = PagePalette(
-        top: rgb(22, 22, 52), bottom: rgb(10, 10, 26),
-        ribbonA: (rgb(240, 210, 140), rgb(190, 160, 240)),
-        ribbonB: (rgb(220, 190, 150), rgb(170, 150, 235)),
-        accent: rgb(240, 210, 150))
+    static let clean = PagePalette(scene: .aurora, accent: rgb(150, 170, 255))
+    static let uninstall = PagePalette(scene: .dusk, accent: rgb(250, 180, 150))
+    static let analyze = PagePalette(scene: .ripple, accent: rgb(205, 175, 250))
+    static let about = PagePalette(scene: .moon, accent: rgb(240, 210, 150))
 }
 
-/// 极光背景：渐变底 + 两条缓慢飘动的柔光丝带 + 少量闪烁微尘。
-/// 约 20 帧/秒；窗口不在前台或系统开启“减弱动态效果”时停住，省电。
+/// 动态背景。约 20 帧/秒；窗口不在前台或系统开启“减弱动态效果”时停住，省电。
 struct PageBackground: View {
     let palette: PagePalette
     @Environment(\.controlActiveState) private var activeState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let start = Date()
+    private static func rgb(_ r: Double, _ g: Double, _ b: Double) -> Color { PagePalette.rgb(r, g, b) }
+
+    /// 固定种子的微尘：x, y(0...1), 半径, 相位
     private static let dust: [(Double, Double, Double, Double)] = {
-        // 固定种子：x, y(0...1), 半径, 相位
         var seed: UInt64 = 7
         func rnd() -> Double {
             seed = seed &* 6364136223846793005 &+ 1442695040888963407
             return Double(seed >> 33) / Double(1 << 31)
         }
-        return (0..<55).map { _ in (rnd(), rnd() * 0.7, [0.8, 1.0, 1.0, 1.3][Int(rnd() * 4) % 4], rnd() * 6.28) }
+        return (0..<150).map { _ in (rnd(), rnd(), [0.8, 1.0, 1.0, 1.3][Int(rnd() * 4) % 4], rnd() * 6.28) }
     }()
 
     var body: some View {
@@ -72,61 +47,197 @@ struct PageBackground: View {
         TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: paused)) { ctx in
             let t = ctx.date.timeIntervalSince(Self.start)
             Canvas { gc, size in
-                draw(gc, size: size, t: t)
+                switch palette.scene {
+                case .aurora: drawAurora(gc, size, t)
+                case .dusk: drawDusk(gc, size, t)
+                case .ripple: drawRipple(gc, size, t)
+                case .moon: drawMoon(gc, size, t)
+                }
             }
         }
         .ignoresSafeArea()
         .accessibilityHidden(true)
     }
 
-    private func draw(_ gc: GraphicsContext, size: CGSize, t: Double) {
+    // MARK: 公共
+
+    private func vertical(_ gc: GraphicsContext, _ size: CGSize, _ stops: [Gradient.Stop]) {
+        gc.fill(Path(CGRect(origin: .zero, size: size)),
+                with: .linearGradient(Gradient(stops: stops), startPoint: .zero,
+                                      endPoint: CGPoint(x: 0, y: size.height)))
+    }
+
+    /// 椭圆柔光：中心 c，半径 rx/ry，颜色 col，强度 a
+    private func glow(_ gc: GraphicsContext, center c: CGPoint, rx: Double, ry: Double, color col: Color, _ a: Double) {
+        var g = gc
+        g.translateBy(x: c.x, y: c.y)
+        g.scaleBy(x: 1, y: ry / rx)
+        let r = rx * 2.2
+        g.fill(Path(ellipseIn: CGRect(x: -r, y: -r, width: r * 2, height: r * 2)),
+               with: .radialGradient(Gradient(stops: [
+                   .init(color: col.opacity(a), location: 0),
+                   .init(color: col.opacity(a * 0.55), location: 0.25),
+                   .init(color: col.opacity(a * 0.15), location: 0.55),
+                   .init(color: col.opacity(0), location: 1)
+               ]), center: .zero, startRadius: 0, endRadius: r))
+    }
+
+    /// 微尘：在 [0, ymax*h] 内慢慢上飘、闪烁；sparkles 个十字亮星
+    private func drawDust(_ gc: GraphicsContext, _ size: CGSize, _ t: Double, count: Int, ymax: Double,
+                          color: Color = .white, strength: Double = 1, sparkles: Int = 0) {
+        let w = size.width, h = size.height, band = h * ymax
+        for (i, d) in Self.dust.prefix(count).enumerated() {
+            var y = (d.1 * band - t * 3 * (0.3 + 0.7 * d.0)).truncatingRemainder(dividingBy: band)
+            if y < 0 { y += band }
+            let x = d.0 * w
+            let a = (0.16 + 0.34 * Double((i * 37) % 10) / 10) * (0.6 + 0.4 * sin(t * 1.5 + d.3)) * strength
+            gc.fill(Path(ellipseIn: CGRect(x: x - d.2, y: y - d.2, width: d.2 * 2, height: d.2 * 2)),
+                    with: .color(color.opacity(a)))
+        }
+        for i in 0..<sparkles {
+            let d = Self.dust[Self.dust.count - 1 - i]
+            let x = d.0 * w, y = 20 + d.1 * h * 0.42
+            let tw = 0.55 + 0.45 * sin(t * 1.1 + d.3 * 3)
+            let len = (4 + 3 * d.2) * (0.8 + 0.4 * tw)
+            var p = Path()
+            p.move(to: CGPoint(x: x - len, y: y)); p.addLine(to: CGPoint(x: x + len, y: y))
+            p.move(to: CGPoint(x: x, y: y - len)); p.addLine(to: CGPoint(x: x, y: y + len))
+            gc.stroke(p, with: .color(.white.opacity(0.6 * tw)), lineWidth: 1)
+            gc.fill(Path(ellipseIn: CGRect(x: x - 1.5, y: y - 1.5, width: 3, height: 3)),
+                    with: .color(.white.opacity(0.85 * tw)))
+        }
+    }
+
+    /// 横向波浪带：中心线 cy 起伏，厚度 th，向上拉丝 up 倍
+    private func band(cy: Double, amp: Double, th: Double, up: Double, w: Double, h: Double, ph: Double, t: Double, speed: Double) -> Path {
+        let step = max(8.0, w / 90)
+        var top: [CGPoint] = [], bot: [CGPoint] = []
+        var x = -40.0
+        while x <= w + 40 {
+            let c = cy + amp * sin(x / 260 + ph + t * speed) + h * 0.014 * sin(x / 97 + ph * 2 + t * speed * 1.6)
+            let breathe = 0.75 + 0.25 * sin(x / 180 + ph + t * speed * 1.2)
+            top.append(CGPoint(x: x, y: c - th * up * breathe))
+            bot.append(CGPoint(x: x, y: c + th * 0.7))
+            x += step
+        }
+        var path = Path()
+        path.addLines(top)
+        path.addLines(bot.reversed())
+        path.closeSubpath()
+        return path
+    }
+
+    private func hFade(_ c0: Color, _ c1: Color, _ a0: Double, _ a1: Double, w: Double) -> GraphicsContext.Shading {
+        .linearGradient(Gradient(stops: [
+            .init(color: c0.opacity(0), location: 0),
+            .init(color: c0.opacity(a0), location: 0.22),
+            .init(color: c1.opacity(a1), location: 0.72),
+            .init(color: c1.opacity(0), location: 1)
+        ]), startPoint: .zero, endPoint: CGPoint(x: w, y: 0))
+    }
+
+    // MARK: 清理 · 极光丝带
+
+    private func drawAurora(_ gc: GraphicsContext, _ size: CGSize, _ t: Double) {
         let w = size.width, h = size.height
-        let full = Path(CGRect(origin: .zero, size: size))
-        gc.fill(full, with: .linearGradient(Gradient(colors: [palette.top, palette.bottom]),
-                                            startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
-        // 丝带：中心线随 x 起伏并随时间缓慢漂移；上沿拉高，像极光往上散开
-        let ribbons: [(cy: Double, amp: Double, th: Double, cols: (Color, Color), ph: Double, k: Double)] = [
-            (0.27, 0.05, 0.085, palette.ribbonA, 0.0, 1.0),
-            (0.41, 0.04, 0.065, palette.ribbonB, 1.7, 0.9)
-        ]
+        vertical(gc, size, [.init(color: Self.rgb(26, 30, 60), location: 0), .init(color: Self.rgb(12, 13, 28), location: 1)])
         gc.drawLayer { layer in
             layer.addFilter(.blur(radius: max(18, h * 0.045)))
-            for r in ribbons {
-                let step = max(8.0, w / 90)
-                var top: [CGPoint] = [], bot: [CGPoint] = []
-                var x = -40.0
-                while x <= w + 40 {
-                    let c = h * r.cy + h * r.amp * sin(x / 260 + r.ph + t * 0.25)
-                        + h * 0.014 * sin(x / 97 + r.ph * 2 + t * 0.4)
-                    let breathe = 0.75 + 0.25 * sin(x / 180 + r.ph + t * 0.3)
-                    top.append(CGPoint(x: x, y: c - h * r.th * 1.6 * breathe))
-                    bot.append(CGPoint(x: x, y: c + h * r.th * 0.7))
-                    x += step
-                }
-                var path = Path()
-                path.addLines(top)
-                path.addLines(bot.reversed())
-                path.closeSubpath()
-                let (c0, c1) = r.cols
-                layer.fill(path, with: .linearGradient(
-                    Gradient(stops: [
-                        .init(color: c0.opacity(0), location: 0),
-                        .init(color: c0.opacity(0.85 * r.k), location: 0.22),
-                        .init(color: c1.opacity(0.7 * r.k), location: 0.7),
-                        .init(color: c1.opacity(0), location: 1)
-                    ]),
-                    startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: w, y: 0)))
+            layer.fill(band(cy: h * 0.27, amp: h * 0.05, th: h * 0.085, up: 1.6, w: w, h: h, ph: 0, t: t, speed: 0.25),
+                       with: hFade(Self.rgb(110, 140, 240), Self.rgb(200, 150, 220), 0.85, 0.7, w: w))
+            layer.fill(band(cy: h * 0.41, amp: h * 0.04, th: h * 0.065, up: 1.6, w: w, h: h, ph: 1.7, t: t, speed: 0.25),
+                       with: hFade(Self.rgb(140, 120, 230), Self.rgb(230, 170, 200), 0.77, 0.63, w: w))
+        }
+        drawDust(gc, size, t, count: 55, ymax: 0.7)
+    }
+
+    // MARK: 卸载 · 暮色晚霞
+
+    private func drawDusk(_ gc: GraphicsContext, _ size: CGSize, _ t: Double) {
+        let w = size.width, h = size.height
+        vertical(gc, size, [.init(color: Self.rgb(30, 20, 52), location: 0), .init(color: Self.rgb(70, 34, 62), location: 1)])
+        // 地平线下的蜜桃色余晖，轻轻呼吸
+        let br = 0.8 + 0.06 * sin(t * 0.35)
+        glow(gc, center: CGPoint(x: w * 0.58, y: h * 1.02), rx: w * 0.42, ry: h * 0.30, color: Self.rgb(250, 170, 140), br)
+        // 横云带：上缘被余晖染亮，缓慢平移
+        let clouds: [(Double, Double, Double, Color, Double, Double)] = [
+            (0.47, 14, 16, Self.rgb(190, 150, 220), 0.30, 3.1),
+            (0.58, 20, 22, Self.rgb(230, 160, 190), 0.42, 1.9),
+            (0.70, 26, 18, Self.rgb(255, 190, 160), 0.55, 0.3),
+            (0.80, 34, 14, Self.rgb(255, 200, 170), 0.50, 4.4)
+        ]
+        gc.drawLayer { layer in
+            layer.addFilter(.blur(radius: max(10, h * 0.02)))
+            for (cy, th, amp, col, s, k) in clouds {
+                layer.fill(band(cy: h * cy, amp: amp, th: th, up: 1.0, w: w, h: h, ph: k, t: t, speed: 0.12),
+                           with: hFade(col, col, s, s * 0.8, w: w))
             }
         }
-        // 微尘：慢慢上飘、轻微闪烁
-        for (i, d) in Self.dust.enumerated() {
-            var y = (d.1 * h * 0.7 - t * 3 * (0.3 + 0.7 * d.0)).truncatingRemainder(dividingBy: h * 0.7)
-            if y < 0 { y += h * 0.7 }
-            let x = d.0 * w
-            let a = (0.16 + 0.3 * Double((i * 37) % 10) / 10) * (0.6 + 0.4 * sin(t * 1.5 + d.3))
-            gc.fill(Path(ellipseIn: CGRect(x: x - d.2, y: y - d.2, width: d.2 * 2, height: d.2 * 2)),
-                    with: .color(.white.opacity(a)))
+        drawDust(gc, size, t, count: 40, ymax: 0.45)
+    }
+
+    // MARK: 磁盘分析 · 紫色星空 + 幻彩涟漪
+
+    private func drawRipple(_ gc: GraphicsContext, _ size: CGSize, _ t: Double) {
+        let w = size.width, h = size.height
+        // 上深下浅：深靛夜空 → 浅紫
+        vertical(gc, size, [
+            .init(color: Self.rgb(20, 16, 44), location: 0),
+            .init(color: Self.rgb(32, 23, 62), location: 0.35),
+            .init(color: Self.rgb(80, 58, 128), location: 0.65),
+            .init(color: Self.rgb(168, 130, 212), location: 1)
+        ])
+        // 左下发出的同心声波，颜色在粉 / 紫 / 冰蓝之间流转，慢慢向外扩
+        let center = CGPoint(x: w * 0.12, y: h * 1.05)
+        let spacing = max(150, w * 0.23)
+        let drift = (t * 9).truncatingRemainder(dividingBy: spacing)
+        let hues = [Self.rgb(255, 190, 235), Self.rgb(200, 170, 255), Self.rgb(170, 215, 255)]
+        gc.drawLayer { layer in
+            layer.addFilter(.blur(radius: 7))
+            var r = drift + 60
+            var i = 0
+            while r < w * 1.6 {
+                let fade = exp(-r / (w * 0.5)) * 0.55
+                let col = hues[(i + Int(t / 6)) % hues.count]
+                let ring = Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+                layer.stroke(ring, with: .color(col.opacity(fade)), lineWidth: 10)
+                r += spacing; i += 1
+            }
         }
+        // 底部粉紫余光
+        glow(gc, center: CGPoint(x: w * 0.4, y: h * 1.05), rx: w * 0.6, ry: h * 0.2, color: Self.rgb(235, 200, 245), 0.35)
+        drawDust(gc, size, t, count: 150, ymax: 0.62, strength: 1.3, sparkles: 7)
+    }
+
+    // MARK: 关于 · 金色月晕薄雾
+
+    private func drawMoon(_ gc: GraphicsContext, _ size: CGSize, _ t: Double) {
+        let w = size.width, h = size.height
+        vertical(gc, size, [.init(color: Self.rgb(34, 30, 64), location: 0), .init(color: Self.rgb(16, 14, 34), location: 1)])
+        let moon = CGPoint(x: w * 0.80, y: h * 0.16)
+        let br = 0.92 + 0.08 * sin(t * 0.5)
+        glow(gc, center: moon, rx: 120, ry: 120, color: Self.rgb(250, 225, 180), 0.55 * br)
+        glow(gc, center: moon, rx: 34, ry: 34, color: Self.rgb(255, 245, 220), 0.75 * br)
+        // 底部两层流雾，往左慢慢流
+        gc.drawLayer { layer in
+            layer.addFilter(.blur(radius: max(14, h * 0.03)))
+            for (base, amp, s, col, k) in [(0.78, 24.0, 0.32, Self.rgb(200, 180, 235), 0.0),
+                                           (0.86, 18.0, 0.42, Self.rgb(235, 210, 200), 2.3)] {
+                var p = Path()
+                p.move(to: CGPoint(x: -40, y: h + 40))
+                var x = -40.0
+                while x <= w + 40 {
+                    let y = h * base + amp * sin(x / 150 + k + t * 0.15) + 10 * sin(x / 57 + t * 0.25)
+                    p.addLine(to: CGPoint(x: x, y: y))
+                    x += max(8, w / 90)
+                }
+                p.addLine(to: CGPoint(x: w + 40, y: h + 40))
+                p.closeSubpath()
+                layer.fill(p, with: .linearGradient(Gradient(colors: [col.opacity(s * 0.5), col.opacity(s)]),
+                                                    startPoint: CGPoint(x: 0, y: h * base), endPoint: CGPoint(x: 0, y: h)))
+            }
+        }
+        drawDust(gc, size, t, count: 45, ymax: 0.6, color: Self.rgb(255, 240, 210))
     }
 }
 
