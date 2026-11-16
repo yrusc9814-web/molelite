@@ -2,7 +2,7 @@ name: mac-build
 
 on:
   push:
-    branches: [main]
+    branches: [main, design-v1]
   workflow_dispatch:
 
 permissions:
@@ -57,18 +57,23 @@ jobs:
         run: |
           APP="$PWD/app/build/MoleLite.app"
           shot() {
-            name=$1; wait=$2; shift 2
+            file=$1; name=$2; wait=$3; shift 3
             pkill -x MoleLite || true; sleep 1
-            open -n "$APP" --args -MoleLiteStartSection "$name" "$@"
+            open -n --env MOLE_TEST_NO_AUTH=1 "$APP" --args -MoleLiteStartSection "$name" "$@"
             sleep "$wait"
-            osascript -e 'tell application "MoleLite" to activate' || true
-            sleep 2
-            screencapture -x "out/shots/$name.png"
+            screencapture -x "out/shots/$file.png"
           }
-          shot about 10
-          shot clean 90 -MoleLiteAutoScan 1
-          shot analyze 60
-          shot uninstall 60 -MoleLiteAutoScan 1
+          shot clean-idle clean 10
+          # 录 6 秒空闲律动（极光 + 暗色音符），失败不影响其他截图
+          screencapture -x -V 6 out/shots/clean-idle.mov || true
+          shot uninstall-idle uninstall 15
+          shot analyze-idle analyze 8
+          shot about about 10
+          screencapture -x -V 5 out/shots/about-idle.mov || true
+          shot clean clean 90 -MoleLiteAutoScan 1
+          shot clean-review clean 90 -MoleLiteAutoScan 1 -MoleLiteAutoReview 1
+          shot analyze analyze 60
+          shot uninstall uninstall 60 -MoleLiteAutoScan 1 -MoleLiteAutoApp Chrome
           pkill -x MoleLite || true
 
       - name: go test ./cmd/analyze/...

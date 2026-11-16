@@ -184,6 +184,12 @@ fi
 log "拷入 rules.json"
 cp -p "$RULES_SRC" "$RESOURCES_DIR/rules.json"
 
+# 音乐字体 Bravura（SIL OFL 1.1，许可证随包，见 Assets/README.md）
+if [ -d "$SCRIPT_DIR/../Assets/fonts" ]; then
+    mkdir -p "$RESOURCES_DIR/fonts"
+    cp -p "$SCRIPT_DIR/../Assets/fonts/"* "$RESOURCES_DIR/fonts/"
+fi
+
 # 顺手带上许可证，别让 GPL 二进制裸奔。
 if [ -f "$ENGINE_SRC/LICENSE" ]; then
     cp -p "$ENGINE_SRC/LICENSE" "$RESOURCES_DIR/engine/LICENSE" 2>/dev/null || true
