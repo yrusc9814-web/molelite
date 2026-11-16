@@ -7,6 +7,12 @@ import SwiftUI
 struct AnalyzeView: View {
     @ObservedObject var model: AnalyzeViewModel
     private let palette = PagePalette.analyze
+    @State private var staffCount = 0
+
+    private var staffPhrase: StaffPhrase {
+        let top = model.sortedEntries.prefix(10).map { Double($0.size) / Double(max(1, model.maxEntrySize)) }
+        return .analyze(weights: model.hasResult ? top : [])
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -26,7 +32,11 @@ struct AnalyzeView: View {
     private var sidePanel: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(spacing: 12) {
-                OrbView(palette: palette, size: 120, busy: model.isAnalyzing)
+                NoteStaffView(phrase: staffPhrase, visibleCount: staffCount)
+                    .frame(width: 250, height: 96)
+                    .modifier(StaffProgress(busy: model.isAnalyzing, done: model.hasResult,
+                                            total: staffPhrase.elements.count, count: $staffCount,
+                                            interval: 0.3))
                     .padding(.top, 6)
                 Text(model.hasResult
                      ? "\(model.entries.count) 项，\(ByteFormat.string(model.totalSize))"

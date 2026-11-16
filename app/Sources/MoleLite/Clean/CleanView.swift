@@ -9,6 +9,8 @@ struct CleanView: View {
     @State private var didAutoScan = false
     @State private var reviewing = false
     @State private var expanded: Set<String> = []
+    @State private var staffCount = 0
+    @State private var heroHover = false
 
     private let palette = PagePalette.clean
 
@@ -67,8 +69,14 @@ struct CleanView: View {
     private var hero: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 20)
-            OrbView(palette: palette, size: 250, busy: model.isScanning)
-            Spacer().frame(height: 44)
+            NoteStaffView(phrase: .clean,
+                          visibleCount: (heroHover && !model.isScanning && !model.hasPreview)
+                              ? StaffPhrase.clean.elements.count : staffCount)
+                .frame(width: 520, height: 186)
+                .modifier(StaffProgress(busy: model.isScanning, done: model.hasPreview,
+                                        total: StaffPhrase.clean.elements.count, count: $staffCount))
+                .onHover { heroHover = $0 }
+            Spacer().frame(height: 30)
 
             Text(heroTitle)
                 .font(.system(size: 34, weight: .bold, design: .rounded))

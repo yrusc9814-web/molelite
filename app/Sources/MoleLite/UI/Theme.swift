@@ -67,148 +67,6 @@ struct PageBackground: View {
     }
 }
 
-// MARK: - 星球（NASA 公有领域照片；缺图时退回代码绘制）
-
-struct DrawnOrbView: View {
-    let palette: PagePalette
-    var size: CGFloat = 240
-    /// 扫描中转得快一些、并带呼吸光晕
-    var busy: Bool = false
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let speed = busy ? 0.35 : 0.06
-            let phase = CGFloat((t * speed).truncatingRemainder(dividingBy: 1))
-            let pulse = busy ? CGFloat(0.5 + 0.5 * sin(t * 2.4)) : 0
-
-            ZStack {
-                // 外光晕
-                Circle()
-                    .fill(palette.orb[1].opacity(0.35 + 0.25 * pulse))
-                    .blur(radius: size * 0.16)
-                    .scaleEffect(1.05 + 0.06 * pulse)
-
-                // 球体 + 条纹
-                Canvas { ctx, canvasSize in
-                    let rect = CGRect(origin: .zero, size: canvasSize)
-                    let circle = Path(ellipseIn: rect)
-                    ctx.clip(to: circle)
-
-                    ctx.fill(circle, with: .linearGradient(
-                        Gradient(colors: [palette.orb[0], palette.orb[1], palette.orb[2]]),
-                        startPoint: CGPoint(x: rect.minX, y: rect.minY),
-                        endPoint: CGPoint(x: rect.maxX, y: rect.maxY)))
-
-                    // 横向条纹，随时间水平漂移，模拟自转
-                    let bandCount = 7
-                    for i in 0..<bandCount {
-                        guard !palette.bands.isEmpty else { break }
-                        let color = palette.bands[i % palette.bands.count]
-                        let y = rect.height * (CGFloat(i) + 0.5) / CGFloat(bandCount)
-                        let h = rect.height * (0.035 + 0.03 * CGFloat((i * 37) % 5) / 4)
-                        let w = rect.width * 0.9
-                        let x = (phase + CGFloat(i) * 0.17).truncatingRemainder(dividingBy: 1) * rect.width * 2 - w
-                        let band = Path(roundedRect: CGRect(x: x, y: y - h / 2, width: w, height: h),
-                                        cornerRadius: h / 2)
-                        ctx.fill(band, with: .color(color))
-                        let band2 = band.offsetBy(dx: rect.width * 2, dy: 0)
-                        ctx.fill(band2, with: .color(color))
-                    }
-
-                    // 明暗交界：右下压暗
-                    ctx.fill(circle, with: .radialGradient(
-                        Gradient(colors: [.clear, .clear, Color.black.opacity(0.55)]),
-                        center: CGPoint(x: rect.width * 0.32, y: rect.height * 0.28),
-                        startRadius: 0,
-                        endRadius: rect.width * 0.85))
-
-                    // 高光
-                    ctx.fill(circle, with: .radialGradient(
-                        Gradient(colors: [Color.white.opacity(0.45), .clear]),
-                        center: CGPoint(x: rect.width * 0.30, y: rect.height * 0.25),
-                        startRadius: 0,
-                        endRadius: rect.width * 0.35))
-                }
-                .overlay(
-                    Circle().strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
-                )
-            }
-            .frame(width: size, height: size)
-        }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
-    }
-}
-
-enum PlanetImages {
-    private static var cache: [String: NSImage] = [:]
-
-    static func image(_ name: String) -> NSImage? {
-        guard !name.isEmpty else { return nil }
-        if let hit = cache[name] { return hit }
-        var candidates: [URL] = []
-        if let res = Bundle.main.resourceURL {
-            candidates.append(res.appendingPathComponent("planets/\(name).png"))
-        }
-        if let dir = ProcessInfo.processInfo.environment["MOLELITE_ASSETS"] {
-            candidates.append(URL(fileURLWithPath: dir).appendingPathComponent("planets/\(name).png"))
-        }
-        // swift run 时从源码目录取：Sources/MoleLite/UI/Theme.swift -> app/Assets
-        let src = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-        candidates.append(src.appendingPathComponent("Assets/planets/\(name).png"))
-        for url in candidates {
-            if let img = NSImage(contentsOf: url) {
-                cache[name] = img
-                return img
-            }
-        }
-        return nil
-    }
-}
-
-struct OrbView: View {
-    let palette: PagePalette
-    var size: CGFloat = 240
-    /// 扫描中带呼吸光晕
-    var busy: Bool = false
-
-    var body: some View {
-        if let img = PlanetImages.image(palette.planet) {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !busy)) { context in
-                let t = context.date.timeIntervalSinceReferenceDate
-                let pulse = busy ? CGFloat(0.5 + 0.5 * sin(t * 2.4)) : 0
-                ZStack {
-                    // 大气光晕
-                    Circle()
-                        .fill(palette.orb[1].opacity(0.30 + 0.25 * pulse))
-                        .blur(radius: size * 0.14)
-                        .scaleEffect(1.04 + 0.06 * pulse)
-                    Image(nsImage: img)
-                        .resizable()
-                        .interpolation(.high)
-                        .aspectRatio(contentMode: .fit)
-                        .clipShape(Circle())
-                        // 背光面压暗一点，增加立体感
-                        .overlay(
-                            Circle().fill(RadialGradient(
-                                colors: [.clear, .clear, Color.black.opacity(0.35)],
-                                center: UnitPoint(x: 0.35, y: 0.3),
-                                startRadius: 0, endRadius: size * 0.75))
-                        )
-                }
-                .frame(width: size, height: size)
-            }
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
-        } else {
-            DrawnOrbView(palette: palette, size: size, busy: busy)
-        }
-    }
-}
-
 // MARK: - 按钮
 
 /// 白色胶囊主按钮。
@@ -302,7 +160,11 @@ struct TopNavBar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            OrbView(palette: .clean, size: 26)
+            Image(systemName: "music.note")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(Color.white.opacity(0.12)))
                 .padding(.horizontal, 6)
             ForEach(SidebarSection.allCases) { section in
                 let active = section == selection

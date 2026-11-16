@@ -184,10 +184,10 @@ fi
 log "拷入 rules.json"
 cp -p "$RULES_SRC" "$RESOURCES_DIR/rules.json"
 
-# 星球照片（NASA 公有领域，来源见 Assets/README.md）
-if [ -d "$SCRIPT_DIR/../Assets/planets" ]; then
-    mkdir -p "$RESOURCES_DIR/planets"
-    cp -p "$SCRIPT_DIR/../Assets/planets/"*.png "$RESOURCES_DIR/planets/"
+# 音乐字体 Bravura（SIL OFL 1.1，许可证随包，见 Assets/README.md）
+if [ -d "$SCRIPT_DIR/../Assets/fonts" ]; then
+    mkdir -p "$RESOURCES_DIR/fonts"
+    cp -p "$SCRIPT_DIR/../Assets/fonts/"* "$RESOURCES_DIR/fonts/"
 fi
 
 # 顺手带上许可证，别让 GPL 二进制裸奔。

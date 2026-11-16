@@ -7,6 +7,7 @@ struct UninstallView: View {
     @StateObject private var model: UninstallViewModel
     @State private var query = ""
     @State private var showConfirm = false
+    @State private var staffCount = 0
 
     private let palette = PagePalette.uninstall
 
@@ -30,6 +31,7 @@ struct UninstallView: View {
             } else {
                 VStack(spacing: 0) {
                     toolbar
+                    staffHeader
                     appList
                     if model.selectedApp != nil {
                         bottomBar
@@ -111,6 +113,41 @@ struct UninstallView: View {
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 10)
+    }
+
+    // MARK: 乐句页头
+
+    /// 选中应用后一句下行乐句淡入；确认卸载时从右往左淡出下坠。
+    private var staffHeader: some View {
+        HStack(spacing: 28) {
+            NoteStaffView(phrase: .uninstall, visibleCount: staffCount, dropOnHide: true)
+                .frame(width: 360, height: 112)
+                .modifier(StaffProgress(busy: model.isPreviewing,
+                                        done: model.hasPreview && !model.isExecuting,
+                                        total: StaffPhrase.uninstall.elements.count,
+                                        count: $staffCount, interval: 0.12))
+            VStack(alignment: .leading, spacing: 6) {
+                Text(model.selectedApp?.name ?? "选择要卸载的应用")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                Text(staffSubtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.white.opacity(0.55))
+                    .monospacedDigit()
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 32)
+        .padding(.bottom, 6)
+    }
+
+    private var staffSubtitle: String {
+        if model.isExecuting { return "正在移到废纸篓…可以从废纸篓恢复" }
+        if model.isPreviewing { return "正在查找残留…" }
+        if model.hasPreview {
+            return "本体 + \(max(0, model.items.count - 1)) 项残留 · 已选 \(ByteFormat.string(model.selectedBytes))"
+        }
+        return "会连同偏好设置、缓存等残留一起找出来"
     }
 
     // MARK: 应用清单
