@@ -266,19 +266,6 @@ struct TreemapView: View {
         Color(red: 0.26, green: 0.42, blue: 0.40),
         Color(red: 0.14, green: 0.30, blue: 0.36),
         Color(red: 0.12, green: 0.26, blue: 0.30)
-    ] = [
-        Color(red: 0.55, green: 0.42, blue: 0.35),
-        Color(red: 0.62, green: 0.36, blue: 0.25),
-        Color(red: 0.50, green: 0.43, blue: 0.47),
-        Color(red: 0.56, green: 0.44, blue: 0.26),
-        Color(red: 0.47, green: 0.38, blue: 0.30),
-        Color(red: 0.52, green: 0.45, blue: 0.48),
-        Color(red: 0.43, green: 0.36, blue: 0.30),
-        Color(red: 0.58, green: 0.40, blue: 0.32),
-        Color(red: 0.45, green: 0.40, blue: 0.42),
-        Color(red: 0.50, green: 0.40, blue: 0.24),
-        Color(red: 0.40, green: 0.34, blue: 0.29),
-        Color(red: 0.36, green: 0.31, blue: 0.27)
     ]
 
     private struct Tile: Identifiable {
