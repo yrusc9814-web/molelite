@@ -10,7 +10,6 @@ struct CleanView: View {
     @State private var reviewing = false
     @State private var expanded: Set<String> = []
     @State private var staffCount = 0
-    @State private var heroHover = false
 
     private let palette = PagePalette.clean
 
@@ -69,24 +68,20 @@ struct CleanView: View {
     private var hero: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 20)
-            NoteStaffView(phrase: .clean,
-                          visibleCount: (heroHover && !model.isScanning && !model.hasPreview)
-                              ? StaffPhrase.clean.elements.count : staffCount)
+            NoteStaffView(phrase: .clean, visibleCount: staffCount)
                 .frame(width: 520, height: 186)
                 .modifier(StaffProgress(busy: model.isScanning, done: model.hasPreview,
                                         total: StaffPhrase.clean.elements.count, count: $staffCount))
-                .onHover { heroHover = $0 }
             Spacer().frame(height: 30)
 
-            Text(heroTitle)
-                .font(.system(size: 34, weight: .bold, design: .rounded))
-                .monospacedDigit()
+            Typo.headline(heroTitle, size: 34)
+                .foregroundStyle(Color(red: 0.98, green: 0.965, blue: 0.94))
                 .contentTransition(.numericText())
 
             HStack(spacing: 6) {
                 Text(heroSubtitle)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.white.opacity(0.55))
+                    .font(Typo.serif(14))
+                    .foregroundStyle(Color.white.opacity(0.72))
                 if model.hasPreview && !model.isScanning {
                     Text("·").foregroundStyle(Color.white.opacity(0.4))
                     Button("重新扫描") { Task { await model.scan() } }

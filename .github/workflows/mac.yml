@@ -64,9 +64,12 @@ jobs:
             screencapture -x "out/shots/$file.png"
           }
           shot clean-idle clean 10
+          # 录 6 秒空闲律动（极光 + 暗色音符），失败不影响其他截图
+          screencapture -x -V 6 out/shots/clean-idle.mov || true
           shot uninstall-idle uninstall 15
           shot analyze-idle analyze 8
           shot about about 10
+          screencapture -x -V 5 out/shots/about-idle.mov || true
           shot clean clean 90 -MoleLiteAutoScan 1
           shot clean-review clean 90 -MoleLiteAutoScan 1 -MoleLiteAutoReview 1
           shot analyze analyze 60

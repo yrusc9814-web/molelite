@@ -35,8 +35,12 @@ struct AboutView: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 4) {
+            NoteStaffView(phrase: .about, visibleCount: 0)
+                .frame(width: 420, height: 140)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 8)
             Text("MoleLite")
-                .font(.largeTitle.weight(.semibold))
+                .font(Typo.numeral(40))
             Text("个人自用的 macOS 清理与磁盘查看工具")
                 .font(.callout)
                 .foregroundStyle(.secondary)

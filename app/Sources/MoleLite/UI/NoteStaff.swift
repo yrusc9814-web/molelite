@@ -4,8 +4,8 @@ import SwiftUI
 
 // MARK: - 五线谱音符装饰
 //
-// 思路借鉴 Kimi 会员页：平时只有淡淡的五线谱；状态到了，音符从左到右逐个淡入并轻微上浮，
-// 播放一次就停。卸载执行时反过来，从右往左淡出并下坠。
+// 平时（空闲）：整句音符保持暗色半透明，按节拍从左到右一个接一个轻轻跳起，循环不停，像音乐在放。
+// 状态到了：音符从左到右逐个点亮并轻微上浮。卸载执行时反过来，从右往左淡出并下坠，落完再回到暗色律动。
 // 字形用 Bravura（SMuFL 标准音乐字体，SIL OFL 1.1），符干、符杠、加线用 Path 画。
 // 坐标系：参考画布 560 x 200，五线谱底线 y = 150，pitch 0 = 底线，每 +1 升半个间距（线/间交替）。
 
@@ -84,6 +84,15 @@ struct StaffPhrase {
         ])
     }()
 
+    /// 关于：一句短短的起伏乐句
+    static let about: StaffPhrase = {
+        var e: [StaffElement] = [.glyph(.treble, x: 30, pitch: 2)]
+        let xs: [Double] = [140, 190, 240, 290, 360, 410, 460, 520]
+        let ps = [4, 6, 8, 7, 5, 6, 4, 2]
+        for (x, p) in zip(xs, ps) { e.append(.note(x, [p])) }
+        return StaffPhrase(elements: e, beams: [StaffBeam(from: 1, to: 4), StaffBeam(from: 5, to: 7)])
+    }()
+
     /// 磁盘分析：低音谱号 + 一串和弦，和弦越厚目录越大。
     /// weights：各目录大小占最大者的比例（0...1），按从大到小排好，最多取 10 个。
     static func analyze(weights: [Double]) -> StaffPhrase {
@@ -111,6 +120,16 @@ struct NoteStaffView: View {
     var dropOnHide: Bool = false
     var stagger: Double = 0.12
     var duration: Double = 0.35
+    /// 空闲律动：未点亮的音符以暗色显示并按节拍跳动
+    var idleRhythm: Bool = true
+    /// 暗色音符的基础不透明度
+    var ghost: Double = 0.26
+    /// 每秒跳几个音符
+    var beat: Double = 2.6
+
+    @Environment(\.controlActiveState) private var activeState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private static let clock = Date()
 
     @State private var shown: [Bool] = []
     @State private var changedAt: [Date] = []
@@ -118,9 +137,11 @@ struct NoteStaffView: View {
     @State private var tick = 0
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: tick >= 0 && Date() > animatingUntil)) { ctx in
+        let rhythmOn = idleRhythm && !reduceMotion && activeState != .inactive
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0,
+                                paused: tick >= 0 && !rhythmOn && Date() > animatingUntil)) { ctx in
             Canvas { gc, size in
-                draw(gc, size: size, now: ctx.date)
+                draw(gc, size: size, now: ctx.date, rhythm: rhythmOn)
             }
         }
         .onAppear { sync(animated: false) }
@@ -157,19 +178,32 @@ struct NoteStaffView: View {
         }
     }
 
-    /// 返回 (不透明度, 竖直位移)
-    private func state(_ i: Int, now: Date) -> (Double, Double) {
-        guard i < shown.count else { return (0, 0) }
-        let t = max(0, min(1, now.timeIntervalSince(changedAt[i]) / duration))
+    /// 返回 (点亮程度 0...1, 竖直位移, 暗色音符可见度 0...1)
+    private func state(_ i: Int, now: Date) -> (Double, Double, Double) {
+        guard i < shown.count else { return (0, 0, 1) }
+        let elapsed = now.timeIntervalSince(changedAt[i])
+        let t = max(0, min(1, elapsed / duration))
         let eased = 1 - pow(1 - t, 3)
         if shown[i] {
-            return (eased, (1 - eased) * 10)
+            return (eased, (1 - eased) * 10, 1)
+        } else if dropOnHide {
+            // 先点亮的音符下坠消失，落完再在原位淡回暗色
+            let back = max(0, min(1, (elapsed - duration) / 0.6))
+            return (1 - eased, t < 1 ? eased * 22 : 0, back)
         } else {
-            return (1 - eased, dropOnHide ? eased * 22 : 0)
+            return (1 - eased, 0, 1)
         }
     }
 
-    private func draw(_ gc: GraphicsContext, size: CGSize, now: Date) {
+    /// 节拍脉冲：0...1，从左到右循环扫过
+    private func pulse(_ i: Int, count: Int, now: Date) -> Double {
+        let period = Double(count + 3)
+        let ph = (now.timeIntervalSince(Self.clock) * beat - Double(i)).truncatingRemainder(dividingBy: period)
+        let p = ph < 0 ? ph + period : ph
+        return max(exp(-pow(p / 0.7, 2)), exp(-pow((p - period) / 0.7, 2)))
+    }
+
+    private func draw(_ gc: GraphicsContext, size: CGSize, now: Date, rhythm: Bool) {
         let refW = 560.0, refH = 200.0, baseY = 150.0, sp = 15.0
         let scale = min(size.width / refW, size.height / refH)
         let ox = (size.width - refW * scale) / 2
@@ -189,8 +223,13 @@ struct NoteStaffView: View {
         var stemTips: [Int: (CGPoint, Double, Bool)] = [:]
         let font = MusicFont.ctFont(size: 4 * sp * scale)
 
+        let total = phrase.elements.count
         for (i, el) in phrase.elements.enumerated() {
-            let (a, dy) = state(i, now: now)
+            let (lit, litDy, ghostVis) = state(i, now: now)
+            let pz = rhythm ? pulse(i, count: total, now: now) : 0
+            let g = idleRhythm ? (ghost + 0.14 * pz) * ghostVis : 0
+            let a = lit + (1 - lit) * g
+            let dy = litDy - (1 - lit) * 9 * pz * ghostVis
             guard a > 0.01 else { continue }
             let color = ink.opacity(a)
             switch el.kind {

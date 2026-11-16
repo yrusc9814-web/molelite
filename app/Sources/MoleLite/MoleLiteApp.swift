@@ -70,8 +70,10 @@ struct RootView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
+            // 切页时两套极光交叉淡入淡出
             PageBackground(palette: palette)
-                .animation(.easeInOut(duration: 0.45), value: selection)
+                .id(selection)
+                .transition(.opacity.animation(.easeInOut(duration: 0.5)))
 
             VStack(spacing: 0) {
                 TopNavBar(selection: $selection, accent: palette.accent)

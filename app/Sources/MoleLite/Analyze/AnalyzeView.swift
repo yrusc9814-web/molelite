@@ -38,11 +38,10 @@ struct AnalyzeView: View {
                                             total: staffPhrase.elements.count, count: $staffCount,
                                             interval: 0.3))
                     .padding(.top, 6)
-                Text(model.hasResult
+                Typo.headline(model.hasResult
                      ? "\(model.entries.count) 项，\(ByteFormat.string(model.totalSize))"
-                     : (model.isAnalyzing ? "正在统计…" : "尚未分析"))
-                    .font(.system(size: 13, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.8))
+                     : (model.isAnalyzing ? "正在统计…" : "尚未分析"), size: 15)
+                    .foregroundStyle(Color.white.opacity(0.88))
                 HStack(spacing: 6) {
                     Button {
                         model.chooseDirectory()

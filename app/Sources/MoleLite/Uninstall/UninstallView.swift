@@ -127,13 +127,12 @@ struct UninstallView: View {
                                         total: StaffPhrase.uninstall.elements.count,
                                         count: $staffCount, interval: 0.12))
             VStack(alignment: .leading, spacing: 6) {
-                Text(model.selectedApp?.name ?? "选择要卸载的应用")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                Typo.headline(model.selectedApp?.name ?? "选择要卸载的应用", size: 24)
+                    .foregroundStyle(Color(red: 0.98, green: 0.965, blue: 0.94))
                     .lineLimit(1)
                 Text(staffSubtitle)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.white.opacity(0.55))
-                    .monospacedDigit()
+                    .font(Typo.serif(13))
+                    .foregroundStyle(Color.white.opacity(0.7))
             }
             Spacer(minLength: 0)
         }
