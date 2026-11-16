@@ -2,7 +2,7 @@ name: mac-build
 
 on:
   push:
-    branches: [main]
+    branches: [main, design-v1]
   workflow_dispatch:
 
 permissions:
@@ -59,10 +59,13 @@ jobs:
           shot() {
             file=$1; name=$2; wait=$3; shift 3
             pkill -x MoleLite || true; sleep 1
-            open -n "$APP" --args -MoleLiteStartSection "$name" "$@"
+            open -n --env MOLE_TEST_NO_AUTH=1 "$APP" --args -MoleLiteStartSection "$name" "$@"
             sleep "$wait"
             screencapture -x "out/shots/$file.png"
           }
+          shot clean-idle clean 10
+          shot uninstall-idle uninstall 15
+          shot analyze-idle analyze 8
           shot about about 10
           shot clean clean 90 -MoleLiteAutoScan 1
           shot clean-review clean 90 -MoleLiteAutoScan 1 -MoleLiteAutoReview 1
