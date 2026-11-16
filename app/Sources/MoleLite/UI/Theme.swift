@@ -12,6 +12,8 @@ struct PagePalette {
     /// 星球表面的条纹色（可为空）
     let bands: [Color]
     let accent: Color
+    /// 星球照片文件名（Assets/planets/<name>.png），找不到时退回代码绘制
+    var planet: String = ""
 
     static let clean = PagePalette(
         top: Color(red: 0.16, green: 0.20, blue: 0.33),
@@ -21,7 +23,8 @@ struct PagePalette {
               Color(red: 0.06, green: 0.14, blue: 0.36)],
         bands: [Color(red: 0.35, green: 0.70, blue: 0.55).opacity(0.55),
                 Color.white.opacity(0.35)],
-        accent: Color(red: 0.48, green: 0.72, blue: 1.0))
+        accent: Color(red: 0.48, green: 0.72, blue: 1.0),
+        planet: "earth")
 
     static let uninstall = PagePalette(
         top: Color(red: 0.24, green: 0.13, blue: 0.14),
@@ -30,7 +33,8 @@ struct PagePalette {
               Color(red: 0.80, green: 0.33, blue: 0.22),
               Color(red: 0.30, green: 0.08, blue: 0.06)],
         bands: [Color(red: 0.55, green: 0.18, blue: 0.10).opacity(0.5)],
-        accent: Color(red: 0.96, green: 0.56, blue: 0.48))
+        accent: Color(red: 0.96, green: 0.56, blue: 0.48),
+        planet: "mars")
 
     static let analyze = PagePalette(
         top: Color(red: 0.27, green: 0.18, blue: 0.11),
@@ -40,7 +44,8 @@ struct PagePalette {
               Color(red: 0.36, green: 0.22, blue: 0.12)],
         bands: [Color(red: 0.62, green: 0.38, blue: 0.22).opacity(0.65),
                 Color(red: 0.95, green: 0.86, blue: 0.72).opacity(0.55)],
-        accent: Color(red: 0.96, green: 0.76, blue: 0.50))
+        accent: Color(red: 0.96, green: 0.76, blue: 0.50),
+        planet: "jupiter")
 
     static let about = PagePalette(
         top: Color(red: 0.19, green: 0.17, blue: 0.29),
@@ -49,7 +54,8 @@ struct PagePalette {
               Color(red: 0.52, green: 0.42, blue: 0.86),
               Color(red: 0.16, green: 0.10, blue: 0.36)],
         bands: [Color.white.opacity(0.25)],
-        accent: Color(red: 0.74, green: 0.66, blue: 1.0))
+        accent: Color(red: 0.74, green: 0.66, blue: 1.0),
+        planet: "moon")
 }
 
 struct PageBackground: View {
@@ -61,9 +67,9 @@ struct PageBackground: View {
     }
 }
 
-// MARK: - 星球（全部用代码画，不使用任何外部图片）
+// MARK: - 星球（NASA 公有领域照片；缺图时退回代码绘制）
 
-struct OrbView: View {
+struct DrawnOrbView: View {
     let palette: PagePalette
     var size: CGFloat = 240
     /// 扫描中转得快一些、并带呼吸光晕
@@ -132,6 +138,74 @@ struct OrbView: View {
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
+    }
+}
+
+enum PlanetImages {
+    private static var cache: [String: NSImage] = [:]
+
+    static func image(_ name: String) -> NSImage? {
+        guard !name.isEmpty else { return nil }
+        if let hit = cache[name] { return hit }
+        var candidates: [URL] = []
+        if let res = Bundle.main.resourceURL {
+            candidates.append(res.appendingPathComponent("planets/\(name).png"))
+        }
+        if let dir = ProcessInfo.processInfo.environment["MOLELITE_ASSETS"] {
+            candidates.append(URL(fileURLWithPath: dir).appendingPathComponent("planets/\(name).png"))
+        }
+        // swift run 时从源码目录取：Sources/MoleLite/UI/Theme.swift -> app/Assets
+        let src = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        candidates.append(src.appendingPathComponent("Assets/planets/\(name).png"))
+        for url in candidates {
+            if let img = NSImage(contentsOf: url) {
+                cache[name] = img
+                return img
+            }
+        }
+        return nil
+    }
+}
+
+struct OrbView: View {
+    let palette: PagePalette
+    var size: CGFloat = 240
+    /// 扫描中带呼吸光晕
+    var busy: Bool = false
+
+    var body: some View {
+        if let img = PlanetImages.image(palette.planet) {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !busy)) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                let pulse = busy ? CGFloat(0.5 + 0.5 * sin(t * 2.4)) : 0
+                ZStack {
+                    // 大气光晕
+                    Circle()
+                        .fill(palette.orb[1].opacity(0.30 + 0.25 * pulse))
+                        .blur(radius: size * 0.14)
+                        .scaleEffect(1.04 + 0.06 * pulse)
+                    Image(nsImage: img)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .clipShape(Circle())
+                        // 背光面压暗一点，增加立体感
+                        .overlay(
+                            Circle().fill(RadialGradient(
+                                colors: [.clear, .clear, Color.black.opacity(0.35)],
+                                center: UnitPoint(x: 0.35, y: 0.3),
+                                startRadius: 0, endRadius: size * 0.75))
+                        )
+                }
+                .frame(width: size, height: size)
+            }
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+        } else {
+            DrawnOrbView(palette: palette, size: size, busy: busy)
+        }
     }
 }
 

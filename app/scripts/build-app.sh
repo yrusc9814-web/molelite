@@ -184,6 +184,12 @@ fi
 log "拷入 rules.json"
 cp -p "$RULES_SRC" "$RESOURCES_DIR/rules.json"
 
+# 星球照片（NASA 公有领域，来源见 Assets/README.md）
+if [ -d "$SCRIPT_DIR/../Assets/planets" ]; then
+    mkdir -p "$RESOURCES_DIR/planets"
+    cp -p "$SCRIPT_DIR/../Assets/planets/"*.png "$RESOURCES_DIR/planets/"
+fi
+
 # 顺手带上许可证，别让 GPL 二进制裸奔。
 if [ -f "$ENGINE_SRC/LICENSE" ]; then
     cp -p "$ENGINE_SRC/LICENSE" "$RESOURCES_DIR/engine/LICENSE" 2>/dev/null || true
