@@ -252,7 +252,21 @@ struct TreemapView: View {
     /// 最多画这么多块，剩下的合并成“其余 N 项”。
     private let maxTiles = 11
 
+    /// 跟分析页极光一致的青绿色系，深浅错开，半透明叠在背景上。
     private static let tileColors: [Color] = [
+        Color(red: 0.16, green: 0.46, blue: 0.50),
+        Color(red: 0.20, green: 0.52, blue: 0.42),
+        Color(red: 0.18, green: 0.38, blue: 0.52),
+        Color(red: 0.26, green: 0.50, blue: 0.48),
+        Color(red: 0.14, green: 0.40, blue: 0.40),
+        Color(red: 0.24, green: 0.44, blue: 0.56),
+        Color(red: 0.18, green: 0.46, blue: 0.36),
+        Color(red: 0.22, green: 0.36, blue: 0.46),
+        Color(red: 0.15, green: 0.34, blue: 0.38),
+        Color(red: 0.26, green: 0.42, blue: 0.40),
+        Color(red: 0.14, green: 0.30, blue: 0.36),
+        Color(red: 0.12, green: 0.26, blue: 0.30)
+    ] = [
         Color(red: 0.55, green: 0.42, blue: 0.35),
         Color(red: 0.62, green: 0.36, blue: 0.25),
         Color(red: 0.50, green: 0.43, blue: 0.47),

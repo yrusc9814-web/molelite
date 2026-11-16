@@ -86,8 +86,8 @@ struct PageBackground: View {
                                             startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
         // 丝带：中心线随 x 起伏并随时间缓慢漂移；上沿拉高，像极光往上散开
         let ribbons: [(cy: Double, amp: Double, th: Double, cols: (Color, Color), ph: Double, k: Double)] = [
-            (0.23, 0.05, 0.075, palette.ribbonA, 0.0, 0.85),
-            (0.36, 0.04, 0.055, palette.ribbonB, 1.7, 0.75)
+            (0.27, 0.05, 0.085, palette.ribbonA, 0.0, 1.0),
+            (0.41, 0.04, 0.065, palette.ribbonB, 1.7, 0.9)
         ]
         gc.drawLayer { layer in
             layer.addFilter(.blur(radius: max(18, h * 0.045)))
@@ -111,8 +111,8 @@ struct PageBackground: View {
                 layer.fill(path, with: .linearGradient(
                     Gradient(stops: [
                         .init(color: c0.opacity(0), location: 0),
-                        .init(color: c0.opacity(0.55 * r.k), location: 0.22),
-                        .init(color: c1.opacity(0.45 * r.k), location: 0.7),
+                        .init(color: c0.opacity(0.85 * r.k), location: 0.22),
+                        .init(color: c1.opacity(0.7 * r.k), location: 0.7),
                         .init(color: c1.opacity(0), location: 1)
                     ]),
                     startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: w, y: 0)))
