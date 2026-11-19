@@ -691,8 +691,8 @@ EOF
 	mkdir -p "$HOME/Library/Containers/com.example.TestApplication"
 	mkdir -p "$HOME/Library/Application Scripts/TEAM.com.example.TestApp.Extension"
 	mkdir -p "$HOME/Library/Application Scripts/TEAM.com.example.TestApplication.Extension"
-	touch "$HOME/Library/Preferences/ByHost/com.example.TestApp.ABC123.plist"
-	touch "$HOME/Library/Preferences/ByHost/com.example.TestApplication.ABC123.plist"
+	touch "$HOME/Library/Preferences/ByHost/com.example.TestApp.5A1B2C3D-1111-2222-3333-444455556666.plist"
+	touch "$HOME/Library/Preferences/ByHost/com.example.TestApplication.5A1B2C3D-1111-2222-3333-444455556666.plist"
 
 	result="$(
 		HOME="$HOME" PROJECT_ROOT="$PROJECT_ROOT" /bin/bash --noprofile --norc <<'EOF'
@@ -702,7 +702,7 @@ find_app_files "com.example.TestApp" "TestApp"
 EOF
 	)"
 
-	[[ "$result" == *"ByHost/com.example.TestApp.ABC123.plist"* ]] || { echo "missed ByHost plist"; exit 1; }
+	[[ "$result" == *"ByHost/com.example.TestApp.5A1B2C3D-1111-2222-3333-444455556666.plist"* ]] || { echo "missed ByHost plist"; exit 1; }
 	[[ "$result" == *"Group Containers/group.com.example.TestApp"* ]] || { echo "missed group container"; exit 1; }
 	[[ "$result" == *"Containers/com.example.TestApp.helper"* ]] || { echo "missed helper container"; exit 1; }
 	[[ "$result" == *"Application Scripts/TEAM.com.example.TestApp.Extension"* ]] || { echo "missed prefixed app script"; exit 1; }
@@ -713,7 +713,7 @@ EOF
 	local fixture_home
 	fixture_home=$(mktemp -d "$HOME/inventory-fixture.XXXXXX")
 	mkdir -p "$fixture_home/Library/Preferences/ByHost"
-	touch "$fixture_home/Library/Preferences/ByHost/com.example.TestApp.ABC123.plist"
+	touch "$fixture_home/Library/Preferences/ByHost/com.example.TestApp.5A1B2C3D-1111-2222-3333-444455556666.plist"
 	mkdir -p "$fixture_home/Applications/TestApp.app"
 
 	run env HOME="$fixture_home" PROJECT_ROOT="$PROJECT_ROOT" /bin/bash --noprofile --norc <<'EOF'
@@ -1768,7 +1768,12 @@ for leaf in 'Caches/com.example.Gizmo.ShipIt' 'Caches/gizmo-updater' 'Applicatio
     mkdir -p "$HOME/Library/$leaf"
 done
 mkdir -p "$HOME/Library/Caches/com.crashlytics.data/com.other.Gizmo" "$HOME/Library/Caches/Electron-updater"
-result=$(find_app_files com.example.Gizmo Gizmo)
+# The updater cache is claimed by declaration, not by display name (B1-09):
+# give the bundle the app-update.yml a real electron-updater build ships.
+app="$HOME/Applications/Gizmo.app"
+mkdir -p "$app/Contents/Resources"
+printf '%s\n' 'provider: generic' 'updaterCacheDirName: gizmo-updater' > "$app/Contents/Resources/app-update.yml"
+result=$(find_app_files com.example.Gizmo Gizmo "$app")
 for leaf in 'Caches/com.example.Gizmo.ShipIt' 'Caches/gizmo-updater' 'Application Support/Caches/gizmo-updater' 'Caches/com.crashlytics.data/com.example.Gizmo' 'Caches/SentryCrash/Gizmo' 'Caches/KSCrash/Gizmo' 'Application Support/com.bugsnag.Bugsnag/com.example.Gizmo'; do
     grep -Fx "$HOME/Library/$leaf" <<< "$result" || exit 1
 done

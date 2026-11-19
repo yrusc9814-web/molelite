@@ -30,7 +30,7 @@ create_app_artifacts() {
     touch "$HOME/Library/Preferences/com.example.TestApp.plist"
     touch "$HOME/Library/Preferences/TestApp.plist"
     mkdir -p "$HOME/Library/Preferences/ByHost"
-    touch "$HOME/Library/Preferences/ByHost/com.example.TestApp.ABC123.plist"
+    touch "$HOME/Library/Preferences/ByHost/com.example.TestApp.5A1B2C3D-1111-2222-3333-444455556666.plist"
     mkdir -p "$HOME/Library/Saved Application State/com.example.TestApp.savedState"
     mkdir -p "$HOME/Library/Saved Application State/TestApp.savedState"
     mkdir -p "$HOME/Library/LaunchAgents"
@@ -6052,7 +6052,9 @@ load_applications() {
     done < "$1"
 }
 uninstall_normalize_size_display() { echo "$1"; }
-mkdir -p "$HOME/Caskroom/bee/1.0/Bee.app"
+# The staged artifact must be the listed app itself (B1-18), not a same-name copy.
+mkdir -p "$HOME/Applications/Bee.app" "$HOME/Caskroom/bee/1.0"
+ln -s "$HOME/Applications/Bee.app" "$HOME/Caskroom/bee/1.0/Bee.app"
 _mole_brew_caskroom_roots() {
     echo room >> "$HOME/room-scans"
     printf '%s\n' "$HOME/Caskroom"
@@ -6084,9 +6086,9 @@ INNER
     [[ "$output" == *'"name": "Alpha", "bundle_id": "com.example.Alpha", "source": "App"'* ]] || return 1
     [[ "$output" == *'"name": "Gamma", "bundle_id": "com.example.Gamma", "source": "App"'* ]] || return 1
     [[ "$output" == *$'\n'"rc=0"$'\n'* ]] || return 1
-    # One `brew list --cask` and one Caskroom scan, not one per app row.
+    # One `brew list --cask`, and a fixed two Caskroom scans (owner roots + artifact snapshot, B1-18), not one per app row.
     [[ "$output" == *$'\n'"list_calls=1"$'\n'* ]] || return 1
-    [[ "${lines[${#lines[@]} - 1]}" == "room_scans=1" ]]
+    [[ "${lines[${#lines[@]} - 1]}" == "room_scans=2" ]]
 }
 
 @test "uninstall --list keeps rows as App when the Homebrew snapshot times out" {

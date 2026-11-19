@@ -1861,8 +1861,8 @@ uninstall_surviving_sibling_names() {
 
 # Mirror of the version-suffix stripping inside find_app_files. Needed here
 # because find_app_files derives extra patterns from the stripped base name
-# ("Zed Nightly" also matches "Zed" paths), so a collision check against the
-# survivor must consider the stripped form as well.
+# ("Zed Nightly" and "Foo (Beta)" also match "Zed"/"Foo" paths), so a collision
+# check against the survivor must consider the stripped form as well.
 uninstall_strip_version_suffix() {
     local stripped
     _uninstall_strip_version_suffix_into stripped "$1"
@@ -1874,9 +1874,14 @@ uninstall_strip_version_suffix() {
 # find_app_files; do not call it under nocasematch.
 _uninstall_strip_version_suffix_into() {
     local _strip_value="$2"
-    local version_suffixes="Nightly|Beta|Alpha|Dev|Canary|Preview|Insider|Edge|Stable|Release|RC|LTS"
+    # Mirror of find_app_files: "Edge" is a product word, not a channel
+    # suffix, so "Microsoft Edge" never collapses to the vendor root
+    # "Microsoft" (B1-01).
+    local version_suffixes="Nightly|Beta|Alpha|Dev|Canary|Preview|Insider|Stable|Release|RC|LTS"
     version_suffixes+="|Developer Edition|Technology Preview"
-    if [[ "$_strip_value" =~ ^(.+)[[:space:]]+(${version_suffixes})$ ]]; then
+    if [[ "$_strip_value" =~ ^(.+[^[:space:]])[[:space:]]*\((${version_suffixes})\)$ ]] ||
+        [[ "$_strip_value" =~ ^(.+)-(${version_suffixes})$ ]] ||
+        [[ "$_strip_value" =~ ^(.+)[[:space:]]+(${version_suffixes})$ ]]; then
         _strip_value="${BASH_REMATCH[1]}"
     fi
     printf -v "$1" '%s' "$_strip_value"

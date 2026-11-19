@@ -344,6 +344,12 @@ holds_compiled_model_cache() {
 # roots with different casing, which still resolves to the same directory on a
 # default case-insensitive APFS volume. Protect the shared roots themselves but
 # not app-specific children such as ~/.config/zed or ~/.local/share/firefox.
+#
+# Unity, Epic and Godot keep a whole game-engine ecosystem under one folder:
+# "Application Support/Godot" holds app_userdata/<project> (every Godot game's
+# saves) and the editor's export_templates, so neither the editor install nor
+# any exported game may claim the root (B1-02). The character class covers the
+# case-insensitive spelling of the same directory.
 _mole_is_shared_home_state_root() {
     local path="${1%/}"
     case "$path" in
@@ -354,7 +360,8 @@ _mole_is_shared_home_state_root() {
             "$HOME"/.[Ll][Oo][Cc][Aa][Ll]/[Ll][Ii][Bb] | \
             "$HOME"/.[Ll][Oo][Cc][Aa][Ll]/[Ss][Hh][Aa][Rr][Ee] | \
             "$HOME"/.[Ll][Oo][Cc][Aa][Ll]/[Ss][Tt][Aa][Tt][Ee] | \
-            "$HOME/Library/Unity" | "$HOME/Library/Application Support/Epic")
+            "$HOME/Library/Unity" | "$HOME/Library/Application Support/Epic" | \
+            "$HOME"/Library/Application\ Support/[Gg][Oo][Dd][Oo][Tt])
             return 0
             ;;
     esac
@@ -372,6 +379,21 @@ _mole_is_steam_library_path() {
     case "$path" in
         "$HOME"/[Ll][Ii][Bb][Rr][Aa][Rr][Yy]/[Aa][Pp][Pp][Ll][Ii][Cc][Aa][Tt][Ii][Oo][Nn]\ [Ss][Uu][Pp][Pp][Oo][Rr][Tt]/[Ss][Tt][Ee][Aa][Mm] | \
             "$HOME"/[Ll][Ii][Bb][Rr][Aa][Rr][Yy]/[Aa][Pp][Pp][Ll][Ii][Cc][Aa][Tt][Ii][Oo][Nn]\ [Ss][Uu][Pp][Pp][Oo][Rr][Tt]/[Ss][Tt][Ee][Aa][Mm]/*)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+# The machine-wide Steam library under /Library is the same shared game store
+# as the per-user root above: every account's installed games live there, so
+# uninstalling Steam.app must not list it (or anything inside it) as a system
+# leftover. Exact root and descendants only; "SteamCompanion" stays separate.
+_mole_is_steam_system_library_path() {
+    local path="${1%/}"
+    case "$path" in
+        /[Ll][Ii][Bb][Rr][Aa][Rr][Yy]/[Aa][Pp][Pp][Ll][Ii][Cc][Aa][Tt][Ii][Oo][Nn]\ [Ss][Uu][Pp][Pp][Oo][Rr][Tt]/[Ss][Tt][Ee][Aa][Mm] | \
+            /[Ll][Ii][Bb][Rr][Aa][Rr][Yy]/[Aa][Pp][Pp][Ll][Ii][Cc][Aa][Tt][Ii][Oo][Nn]\ [Ss][Uu][Pp][Pp][Oo][Rr][Tt]/[Ss][Tt][Ee][Aa][Mm]/*)
             return 0
             ;;
     esac
@@ -759,6 +781,46 @@ _mole_uninstall_is_common_app_name() {
     return 1
 }
 
+# A vendor name on its own is a shared root ("Microsoft" holds Office, Teams,
+# OneDrive and Edge), never one product's data folder. Only the exact derived
+# base is matched, so "Microsoft Edge" keeps its own "Microsoft Edge" folders
+# while a channel build can no longer collapse to "Microsoft" (B1-01).
+_mole_uninstall_is_vendor_root_name() {
+    local lower_name
+    lower_name=$(_mole_uninstall_lower "${1:-}")
+    case "$lower_name" in
+        microsoft | google | adobe | jetbrains | mozilla | oracle | unity | epic | \
+            tencent | apple)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+# Product words that name one shared data leaf for many apps, so an app-name
+# template cannot claim them: any "Code.app" would take Visual Studio Code's
+# profile (Application Support/Code, Caches/Code, Preferences/Code.plist) and
+# its whole snippet/globalStorage/workspaceStorage tree (B1-05). A bare vendor
+# word ("Microsoft", "Adobe") is the same trap one level up: it names the
+# vendor's shared root, not one product's data (B1-05), which the vendor table
+# above already covers. A product rule that proves the owner, such as the
+# com.microsoft.VSCode rule below, still supplies the leaf. "Live" is a
+# generic session/format word, not a folder owner: the product token of
+# com.ableton.live must not claim /Users/Shared/Live Recording Session
+# (B1-21). Exact whole-leaf match only, so "CodeRunner" or "Microsoft Edge"
+# keep their own folders.
+_mole_uninstall_is_shared_product_name() {
+    local lower_name
+    lower_name=$(_mole_uninstall_lower "${1:-}")
+    _mole_uninstall_is_vendor_root_name "$lower_name" && return 0
+    case "$lower_name" in
+        code | live)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
 _mole_uninstall_vendor_product_tokens() {
     local bundle_id="${1:-}"
     mole_is_reverse_dns_bundle_id "$bundle_id" || return 1
@@ -783,6 +845,79 @@ _mole_uninstall_name_variant_matches() {
         if [[ "$candidate_lower" == "$variant" ||
             "$candidate_lower" == "$variant "* ||
             "$candidate_lower" == "$variant-"* ||
+            "$candidate_lower" == "${variant}_"* ||
+            "$candidate_lower" == "$variant."* ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# A launchd label is a dotted reverse-DNS name, so match the app name only as
+# one whole label component. A plain substring match let "ClashX" claim
+# com.west2online.ClashXPro.ProxyConfigHelper.plist, another product's daemon
+# (B1-21). Components are still compared with the name-variant boundaries, so
+# "ClashX" keeps "com.vendor.ClashX.helper" and "ClashX Helper", never
+# "ClashXPro".
+_mole_uninstall_launchd_label_has_app_name() {
+    local label_lower
+    label_lower=$(_mole_uninstall_lower "${1:-}")
+    local app_lower
+    app_lower=$(_mole_uninstall_lower "${2:-}")
+    [[ -n "$label_lower" && -n "$app_lower" ]] || return 1
+
+    local rest="$label_lower" component
+    while [[ -n "$rest" ]]; do
+        component="${rest%%.*}"
+        if [[ "$component" == "$rest" ]]; then
+            rest=""
+        else
+            rest="${rest#*.}"
+        fi
+        _mole_uninstall_name_variant_matches "$component" "$app_lower" && return 0
+    done
+    return 1
+}
+
+# A vendor folder holds several products side by side ("Acme/FooBar",
+# "Acme/FooBar 2"). A space is not proof that the trailing word belongs to
+# this app: Finder numbers a copied bundle "FooBar 2.app", so "Acme/FooBar 2"
+# is that copy's data, and an unknown word ("Acme/FooBar Deluxe") may be
+# another product of the same vendor. Under a vendor folder a spaced child
+# therefore keeps its match only when the tail is a channel word
+# ("FooBar Beta") or a version ("FooBar 8.5", "FooBar 2024.1"). The exact
+# name and the hyphen/underscore/dot separators are unchanged. Only ever
+# narrows what an uninstall removes (B1-17).
+#
+# Already folded, because the child leaf is compared lowercase. These are the
+# same channel words as _mole_app_family_suffixes below; keep the two lists in
+# step, and keep "rc"/"lts" whole-word only (they are matched, never prefixed).
+_mole_uninstall_lower_channel_words="nightly|beta|alpha|dev|canary|preview|insider|stable|release|rc|lts"
+_mole_uninstall_lower_channel_words+="|developer edition|technology preview"
+
+_mole_uninstall_vendor_child_matches() {
+    local candidate_lower="$1"
+    shift
+
+    local channel_re="${_mole_uninstall_lower_channel_words:-}"
+    local variant rest
+    for variant in "$@"; do
+        [[ -n "$variant" ]] || continue
+        [[ "$candidate_lower" == "$variant" ]] && return 0
+        if [[ "$candidate_lower" == "$variant "* ]]; then
+            rest="${candidate_lower#"$variant" }"
+            [[ -n "$rest" ]] || continue
+            if [[ -n "$channel_re" && "$rest" =~ ^($channel_re)$ ]]; then
+                return 0
+            fi
+            if [[ -n "$channel_re" && "$rest" =~ ^\(($channel_re)\)$ ]]; then
+                return 0
+            fi
+            [[ "$rest" =~ ^[0-9]+(\.[0-9]+)+$ ]] && return 0
+            continue
+        fi
+        if [[ "$candidate_lower" == "$variant-"* ||
             "$candidate_lower" == "${variant}_"* ||
             "$candidate_lower" == "$variant."* ]]; then
             return 0
@@ -834,7 +969,9 @@ _mole_uninstall_materialize_find0() {
     return 0
 }
 
-# Exact bundle-ID filenames identify the app's own agent. Other labels need a
+# An exact bundle-ID filename identifies the app's own agent, but a launchd
+# label can be reused: when the plist names a program outside the selected
+# bundle, the name alone does not prove ownership. Other labels need a
 # readable plist whose launchd program resolves inside the selected bundle;
 # name matches and text mentions do not establish that ownership. Callers
 # recheck before teardown and removal. Returns 0 for owned, 1 for unproven,
@@ -851,11 +988,17 @@ mole_uninstall_launch_agent_owned_by_app() {
     [[ "$plist" == *.plist ]] || return 1
     [[ -f "$plist" && ! -L "$plist" ]] || return 1
     [[ "${plist##*/}" != com.apple.* ]] || return 1
+    local exact_bundle_label=false
     if mole_is_reverse_dns_bundle_id "$bundle_id" &&
         [[ "${plist##*/}" == "$bundle_id.plist" ]]; then
-        return 0
+        exact_bundle_label=true
     fi
-    [[ "$app_path" == /* && "$app_path" != / ]] || return 1
+    if [[ "$app_path" != /* || "$app_path" == / ]]; then
+        # Without a selected bundle there is no program to compare, so the
+        # exact label remains the only ownership evidence.
+        [[ "$exact_bundle_label" == true ]] && return 0
+        return 1
+    fi
 
     local deadline="${_MOLE_UNINSTALL_DISCOVERY_DEADLINE:-$((SECONDS + MOLE_TIMEOUT_QUICK_DETECT_SEC))}"
     local timeout=""
@@ -872,7 +1015,13 @@ mole_uninstall_launch_agent_owned_by_app() {
         program=$(run_with_timeout "$timeout" plutil -extract \
             ProgramArguments.0 raw "$plist" 2> /dev/null) || probe_rc=$?
         mole_rc_timeout_or_signal "$probe_rc" && return "$probe_rc"
-        [[ $probe_rc -eq 0 ]] || return 1
+        if [[ $probe_rc -ne 0 ]]; then
+            # A plist that names no program keeps the exact label as its
+            # ownership proof; a named program must still resolve inside the
+            # selected bundle (B1-19).
+            [[ "$exact_bundle_label" == true ]] && return 0
+            return 1
+        fi
     fi
 
     [[ "$program" == "$app_path"/* &&
@@ -932,7 +1081,7 @@ find_vendor_nested_app_paths() {
 
             child_base="${candidate##*/}"
             child_lower=$(_mole_uninstall_lower "$child_base")
-            if _mole_uninstall_name_variant_matches "$child_lower" \
+            if _mole_uninstall_vendor_child_matches "$child_lower" \
                 "$app_lower" "$nospace_lower" "$hyphen_lower" "$underscore_lower" "$product_lower"; then
                 matched_paths+=("$candidate")
             fi
@@ -954,6 +1103,11 @@ find_shared_app_paths() {
     local token_pair
     if token_pair=$(_mole_uninstall_vendor_product_tokens "$bundle_id" 2> /dev/null); then
         IFS='|' read -r _ product_token <<< "$token_pair"
+    fi
+    # A generic product word cannot own a shared leaf; only a distinctive
+    # token ("uuremote") may stand in for the display name (B1-21).
+    if [[ -n "$product_token" ]] && _mole_uninstall_is_shared_product_name "$product_token"; then
+        product_token=""
     fi
 
     # A localized display name can be short or non-Latin ("UU远程", four
@@ -1095,6 +1249,27 @@ mole_uninstall_uuid_container_owned() {
     [[ $rc -eq 0 && "$owner" == "$bundle_id" ]]
 }
 
+# 0 when a ByHost preference plist belongs to this bundle id. A ByHost file is
+# "<domain>.<host-uuid>.plist", so the domain is the bundle id followed by one
+# UUID segment and the extension. A plain prefix test also claimed
+# "com.acme.Foo.Bar.<uuid>.plist", which is Foo Bar.app's domain
+# (com.acme.Foo.Bar), not com.acme.Foo's (B1-15). Only the exact
+# "<id>.<uuid>.plist" shape passes; any other suffix stays on disk, because a
+# name alone cannot prove that another product's preference is ours.
+mole_uninstall_byhost_plist_owned() {
+    local path="$1" bundle_id="$2"
+    local dir="${path%/*}" name="${path##*/}" host=""
+    [[ -n "$bundle_id" && -f "$path" && ! -L "$path" ]] || return 1
+    [[ "${dir%/}" == "$HOME/Library/Preferences/ByHost" ]] || return 1
+    mole_is_reverse_dns_bundle_id "$bundle_id" || return 1
+    # Literal prefix, not a regex: the bundle id may contain dots, which would
+    # otherwise match any character in the pattern.
+    [[ "$name" == "$bundle_id".*".plist" ]] || return 1
+    host="${name#"$bundle_id".}"
+    host="${host%.plist}"
+    [[ "$host" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]]
+}
+
 mole_uninstall_native_manifest_owned() {
     local path="$1" app_path="$2"
     [[ "${path%/*}" == "$HOME/Library/Application Support/"*/NativeMessagingHosts &&
@@ -1167,7 +1342,7 @@ _mole_uninstall_embedded_bundle_ids() {
             *) continue ;;
         esac
 
-        embedded_id=$(plutil -extract CFBundleIdentifier raw "$info" 2> /dev/null || true)
+        embedded_id=$(_mole_uninstall_plist_bundle_id "$info")
         mole_is_reverse_dns_bundle_id "$embedded_id" || continue
         [[ "$embedded_id" == "$primary_bundle_id" ]] && continue
         # Shared framework services are not owned by every app that embeds them.
@@ -1182,6 +1357,288 @@ _mole_uninstall_embedded_bundle_ids() {
     if [[ ${#embedded_ids[@]} -gt 0 ]]; then
         printf '%s\n' "${embedded_ids[@]}" | sort -u
     fi
+}
+
+# Print CFBundleIdentifier from one Info.plist. plutil is absent on the Linux
+# test host, so an XML plist falls back to reading the string that follows the
+# exact <key>CFBundleIdentifier</key> line. Prints nothing when unreadable.
+_mole_uninstall_plist_bundle_id() {
+    local info="${1:-}"
+    [[ -f "$info" && ! -L "$info" ]] || return 0
+
+    local bundle_id=""
+    if command -v plutil > /dev/null 2>&1; then
+        bundle_id=$(plutil -extract CFBundleIdentifier raw "$info" 2> /dev/null || true)
+        if [[ -n "$bundle_id" ]]; then
+            printf '%s\n' "$bundle_id"
+            return 0
+        fi
+    fi
+
+    # XML fallback: the <string> beside or on the line after the
+    # CFBundleIdentifier key.
+    bundle_id=$(/usr/bin/awk '
+        {
+            line = $0
+            if (want && line ~ /<string>/) {
+                sub(/.*<string>/, "", line)
+                sub(/<\/string>.*/, "", line)
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+                print line
+                exit
+            }
+            if (line ~ /<key>[[:space:]]*CFBundleIdentifier[[:space:]]*<\/key>/) {
+                rest = line
+                sub(/.*<\/key>/, "", rest)
+                if (rest ~ /<string>/) {
+                    sub(/.*<string>/, "", rest)
+                    sub(/<\/string>.*/, "", rest)
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", rest)
+                    print rest
+                    exit
+                }
+                want = 1
+                next
+            }
+            if (want && line ~ /<key>/) { want = 0 }
+        }
+    ' "$info" 2> /dev/null || true)
+    [[ -n "$bundle_id" ]] && printf '%s\n' "$bundle_id"
+    return 0
+}
+
+# Print CFBundleExecutable from one Info.plist. Same plutil-then-XML fallback
+# as the bundle-id reader above; plutil is absent on the Linux test host.
+# Prints nothing when unreadable, which callers read as no ownership proof.
+_mole_uninstall_plist_executable() {
+    local info="${1:-}"
+    [[ -f "$info" && ! -L "$info" ]] || return 0
+
+    local exec_name=""
+    if command -v plutil > /dev/null 2>&1; then
+        exec_name=$(plutil -extract CFBundleExecutable raw "$info" 2> /dev/null || true)
+        if [[ -n "$exec_name" ]]; then
+            printf '%s\n' "$exec_name"
+            return 0
+        fi
+    fi
+
+    # XML fallback: the <string> beside or on the line after the key.
+    exec_name=$(/usr/bin/awk '
+        {
+            line = $0
+            if (want && line ~ /<string>/) {
+                sub(/.*<string>/, "", line)
+                sub(/<\/string>.*/, "", line)
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+                print line
+                exit
+            }
+            if (line ~ /<key>[[:space:]]*CFBundleExecutable[[:space:]]*<\/key>/) {
+                rest = line
+                sub(/.*<\/key>/, "", rest)
+                if (rest ~ /<string>/) {
+                    sub(/.*<string>/, "", rest)
+                    sub(/<\/string>.*/, "", rest)
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", rest)
+                    print rest
+                    exit
+                }
+                want = 1
+                next
+            }
+            if (want && line ~ /<key>/) { want = 0 }
+        }
+    ' "$info" 2> /dev/null || true)
+    [[ -n "$exec_name" ]] && printf '%s\n' "$exec_name"
+    return 0
+}
+
+# 0 when this bundle is Apple's Xcode itself, so the Xcode, DerivedData and
+# CoreSimulator caches the toolchain rule sweeps are its own. A display name
+# that merely contains "Xcode" proves nothing: "XcodeBuild Helper.app" and
+# "Xcode Clean.app" are other products, and DerivedData holds every project's
+# build products while DeviceSupport holds the user's device caches (B1-11).
+# Accepted owners are Apple's Xcode bundle id (every channel shares it:
+# Xcode.app and Xcode-beta.app are both com.apple.dt.Xcode) or a bundle that
+# declares CFBundleExecutable "Xcode" (Xcode-beta ships that executable).
+# Anything else, including an unreadable Info.plist, keeps the caches.
+_mole_uninstall_xcode_owned() {
+    local app_path="${1:-}" bundle_id="${2:-}"
+    local bundle_lower=""
+    mole_ascii_lowercase bundle_lower "$bundle_id"
+    case "$bundle_lower" in
+        com.apple.dt.xcode | com.apple.dt.xcode.*) return 0 ;;
+    esac
+    local exec_name=""
+    exec_name=$(_mole_uninstall_plist_executable "$app_path/Contents/Info.plist") || exec_name=""
+    [[ "$exec_name" == "Xcode" ]]
+}
+
+# 0 when this bundle is Google's Android Studio, so the ~/.android caches the
+# Android rule sweeps are its own. The old trigger was an unanchored name
+# substring (/Android.*Studio/), which matched any "NotAndroid Studio.app" or
+# "Android Paint Studio.app"; ~/.android/build-cache is Gradle's cross-project
+# build cache and belongs to no unrelated app (B1-12). Accepted owners are
+# Google's bundle id (com.google.android.studio plus its channel and helper
+# continuations, dot or hyphen spelled) or a bundle that declares
+# CFBundleExecutable "studio" (Android Studio ships that executable). Anything
+# else, including an unreadable Info.plist, keeps the caches.
+_mole_uninstall_android_studio_owned() {
+    local app_path="${1:-}" bundle_id="${2:-}"
+    local bundle_lower=""
+    mole_ascii_lowercase bundle_lower "$bundle_id"
+    case "$bundle_lower" in
+        com.google.android.studio | com.google.android.studio.* | com.google.android.studio-*) return 0 ;;
+    esac
+    local exec_name=""
+    exec_name=$(_mole_uninstall_plist_executable "$app_path/Contents/Info.plist") || exec_name=""
+    [[ "$exec_name" == "studio" ]]
+}
+
+# Print the updater cache directory an Electron app declares for itself in
+# Contents/Resources/app-update.yml (electron-updater's updaterCacheDirName).
+# A "<productName>-updater" directory belongs to every Electron product that
+# uses that productName, so a display name alone proves nothing: an unrelated
+# "Code.app" or "Arc.app" would claim the real product's cache, and Caches/*
+# is deleted without a prompt (B1-09). Print nothing when the bundle declares
+# no usable name; callers then leave the directory alone.
+_mole_uninstall_declared_updater_dir() {
+    local app_path="${1:-}"
+    [[ -n "$app_path" && -d "$app_path" && ! -L "$app_path" ]] || return 0
+
+    local config="$app_path/Contents/Resources/app-update.yml"
+    [[ -f "$config" && ! -L "$config" ]] || return 0
+
+    local line value name=""
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*updaterCacheDirName[[:space:]]*: ]] || continue
+        value="${line#*:}"
+        # Trim YAML's surrounding whitespace with parameter expansion, which
+        # keeps this bash 3.2 compatible and spawns nothing.
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        # electron-builder quotes the value in some versions.
+        case "$value" in
+            \"*\") value="${value#\"}" && value="${value%\"}" ;;
+            \'*\') value="${value#\'}" && value="${value%\'}" ;;
+        esac
+        name="$value"
+        break
+    done < "$config"
+
+    [[ -n "$name" ]] || return 0
+    # The value becomes a path component below. Accept only a plain leaf that
+    # names an updater cache directory; anything else fails closed.
+    case "$name" in
+        */* | *\\* | *[\*\?\[]* | .* | *[[:cntrl:]]*) return 0 ;;
+    esac
+    [[ "$name" == *-updater && ${#name} -gt 8 ]] || return 0
+    printf '%s\n' "$name"
+    return 0
+}
+
+# 0 when no other installed bundle declares the same updater cache directory.
+# Two Electron products shipped with one productName (and so one
+# updaterCacheDirName) share the directory, so while the other build is
+# installed the cache cannot be attributed to either one. Only ever narrows
+# what an uninstall removes (B1-09).
+_mole_uninstall_installed_app_owns_updater() {
+    local updater_path="${1:-}"
+    local app_path="${2:-}"
+    local dir_name="${updater_path##*/}"
+    [[ -n "$dir_name" && -n "$app_path" ]] || return 1
+
+    local root candidate other
+    while IFS= read -r root; do
+        [[ -d "$root" ]] || continue
+        for candidate in "$root"/*.[aA][pP][pP]; do
+            [[ -d "$candidate" && ! -L "$candidate" ]] || continue
+            if [[ -e "$app_path" && "$candidate" -ef "$app_path" ]]; then
+                continue
+            fi
+            other=$(_mole_uninstall_declared_updater_dir "$candidate") || other=""
+            [[ "$other" == "$dir_name" ]] && return 1
+        done
+    done < <(_mole_app_probe_roots)
+    return 0
+}
+
+# Print the bundle ids of the app's own nested code: extensions, XPC services,
+# login items and helper apps (maxdepth 3 below Contents). Callers use this to
+# decide whether a "<primary id>.<suffix>" container is the app's own helper or
+# another product whose id merely shares the primary id as a prefix (B1-03).
+_mole_uninstall_bundle_ids_under_contents() {
+    local app_path="${1:-}"
+    [[ -n "$app_path" && -d "$app_path/Contents" ]] || return 0
+
+    local scan_file=""
+    scan_file=$(create_temp_file) || return 1
+    local scan_rc=0
+    _mole_uninstall_materialize_find0 "$scan_file" "$app_path/Contents" \
+        -maxdepth 3 \( -name '*.appex' -o -name '*.app' -o -name '*.xpc' \) -type d -print0 || scan_rc=$?
+    if [[ $scan_rc -ne 0 ]]; then
+        rm -f -- "$scan_file" 2> /dev/null || true # SAFE: exact tracked temp file created above
+        return "$scan_rc"
+    fi
+
+    local -a bundle_ids=()
+    local bundle_root info bundle_id
+    while IFS= read -r -d '' bundle_root; do
+        for info in "$bundle_root/Contents/Info.plist" "$bundle_root/Info.plist"; do
+            [[ -f "$info" && ! -L "$info" ]] || continue
+            bundle_id=$(_mole_uninstall_plist_bundle_id "$info")
+            mole_is_reverse_dns_bundle_id "$bundle_id" && bundle_ids+=("$bundle_id")
+            break
+        done
+    done < "$scan_file"
+    rm -f -- "$scan_file" 2> /dev/null || true # SAFE: exact tracked temp file created above
+
+    if [[ ${#bundle_ids[@]} -gt 0 ]]; then
+        printf '%s\n' "${bundle_ids[@]}" | sort -u
+    fi
+    return 0
+}
+
+# 0 when a "<bundle_id>.<suffix>" derived root names one of the app's own
+# embedded bundle ids. Without an installed app path the old prefix behavior
+# stands: derived roots cannot then be checked against the bundle (B1-03).
+_mole_uninstall_derived_root_owned() {
+    local derived_path="${1:-}"
+    local bundle_id="${2:-}"
+    local embedded_ids="${3:-}"
+
+    local leaf="${derived_path##*/}"
+    # Exact id and TeamID.<id> forms are handled by the existing boundary rule.
+    [[ "$leaf" == "$bundle_id".* ]] || return 0
+
+    local embedded_id
+    while IFS= read -r embedded_id; do
+        [[ -n "$embedded_id" && "$leaf" == "$embedded_id" ]] && return 0
+    done <<< "$embedded_ids"
+    return 1
+}
+
+# 0 when a Group Container names this app itself. A group container is named
+# "<prefix>.<group id>" and every app of that team which declares the group
+# shares it, so a trailing segment after the bundle id proves nothing:
+# uninstalling Foo.app (com.acme.Foo) must not claim
+# ABCD1234.com.acme.Foo.shared, an App Group Foo Sync.app also uses, nor
+# ABCD1234.com.acme.Foo.sync (B1-04). Only the exact id and a single-label
+# prefix directly followed by it are the app's own. Anything else is left in
+# place -- the fail-safe direction is to leave data behind rather than delete
+# another app's shared container (policy 1). Group Containers stay held back
+# from --with-data regardless (review.sh).
+_mole_uninstall_group_container_owned() {
+    local container_path="${1:-}"
+    local bundle_id="${2:-}"
+
+    mole_is_reverse_dns_bundle_id "$bundle_id" || return 1
+    local leaf="${container_path##*/}"
+    [[ "$leaf" != "$bundle_id" ]] || return 0
+    [[ "$leaf" == *."$bundle_id" ]] || return 1
+    local prefix="${leaf%."$bundle_id"}"
+    [[ -n "$prefix" && "$prefix" != *.* && "$prefix" =~ ^[A-Za-z0-9]+$ ]]
 }
 
 # Locate files associated with an application
@@ -1207,7 +1664,11 @@ mole_is_playcover_app() {
 # must point at the same-named entry of one installed bundle. Info.plist is a
 # link in older aliases and a copy since PlayCover's macOS 27 change
 # (LaunchServices refuses to open the alias while it is a link); a copy must
-# carry the bundle's id. A Finder .DS_Store is the other regular file tolerated.
+# carry the bundle's id. A Finder .DS_Store is the other regular file tolerated,
+# and so is any entry PlayCover copied instead of linked: a real file whose bytes
+# equal the same-named root entry of that bundle (B2-07). Both checks read the
+# entry's owner, so a same-named foreign file, a different copy or a real
+# subdirectory still fails closed and keeps the alias out of the list.
 mole_playcover_alias_target() {
     local alias_path="$1"
     [[ "${alias_path%/*}" == "$HOME/Applications/PlayCover" ]] || return 1
@@ -1230,19 +1691,67 @@ mole_playcover_alias_target() {
     local alias_id="" bundle_id=""
     for entry in "$alias_path"/* "$alias_path"/.[!.]* "$alias_path"/..?*; do
         [[ -e "$entry" && ! -L "$entry" ]] || continue
-        case "${entry##*/}" in
+        name="${entry##*/}"
+        case "$name" in
             .DS_Store) [[ -f "$entry" ]] && continue ;;
             Info.plist)
                 if [[ -f "$entry" ]]; then
-                    alias_id=$(plutil -extract CFBundleIdentifier raw "$entry" 2> /dev/null || echo "")
-                    bundle_id=$(plutil -extract CFBundleIdentifier raw "$target/Info.plist" 2> /dev/null || echo "")
+                    alias_id=$(_mole_uninstall_plist_bundle_id "$entry")
+                    bundle_id=$(_mole_uninstall_plist_bundle_id "$target/Info.plist")
                     [[ -n "$alias_id" && "$alias_id" == "$bundle_id" ]] && continue
+                fi
+                ;;
+            *)
+                # A copy of the bundle's own root entry: same name, same bytes.
+                if [[ -f "$entry" && -f "$target/$name" && ! -L "$target/$name" ]] &&
+                    cmp -s "$entry" "$target/$name"; then
+                    continue
                 fi
                 ;;
         esac
         return 1
     done
     printf '%s\n' "$target"
+}
+
+# Print the app roots an "is another copy installed" probe walks.
+# Test-only: Bats exports BATS_TEST_FILENAME, so a suite never reads the
+# host's /Applications (tests/helpers/common.bash sets an empty root).
+_mole_app_probe_roots() {
+    if [[ "${MOLE_TEST_MODE:-0}" == "1" || "${MOLE_TEST_NO_AUTH:-0}" == "1" ||
+        -n "${BATS_TEST_FILENAME:-}" ]] && [[ -n "${MOLE_TEST_APP_FAMILY_ROOT:-}" ]]; then
+        printf '%s\n' "$MOLE_TEST_APP_FAMILY_ROOT"
+        return 0
+    fi
+    printf '%s\n' "/Applications" "$HOME/Applications"
+}
+
+# 0 when a folded spelling ("FooBar", "foo-bar") may stand for this app's data:
+# it does not collapse to a shared product or vendor root (B1-05) and no
+# installed bundle carries that exact name (B1-07).
+_mole_uninstall_folded_spelling_owned() {
+    local spelling="${1:-}"
+    local app_path="${2:-}"
+    [[ -n "$spelling" ]] || return 1
+    _mole_uninstall_is_shared_product_name "$spelling" && return 1
+    _mole_installed_app_exact_name "$spelling" "$app_path" && return 1
+    return 0
+}
+
+# 0 when the folded spellings of a compound name may be offered at all. An
+# installed product named exactly like one folded spelling ("FooBar.app") picks
+# its own separator convention, so every spelling of that folded name is
+# ambiguous, not just the one on disk: "Foo_Bar" and "Foo-Bar" would delete its
+# folders too. When any spelling collides, the whole folded group stays
+# (B1-07); the direct and base-name patterns above and below still apply.
+_mole_uninstall_folded_name_owned() {
+    local app_path="${1:-}"
+    shift
+    local spelling
+    for spelling in "$@"; do
+        _mole_uninstall_folded_spelling_owned "$spelling" "$app_path" || return 1
+    done
+    return 0
 }
 
 # Whether another build of an app family is installed: the stable app
@@ -1256,15 +1765,8 @@ _mole_app_family_sibling_installed() {
     local app_path="${2:-}"
     local suffixes="$3"
     [[ -n "$family" ]] || return 1
-    local -a roots=("/Applications" "$HOME/Applications")
-    # Test-only: Bats exports BATS_TEST_FILENAME, so a suite never reads the
-    # host's /Applications (tests/helpers/common.bash sets an empty root).
-    if [[ "${MOLE_TEST_MODE:-0}" == "1" || "${MOLE_TEST_NO_AUTH:-0}" == "1" ||
-        -n "${BATS_TEST_FILENAME:-}" ]] && [[ -n "${MOLE_TEST_APP_FAMILY_ROOT:-}" ]]; then
-        roots=("$MOLE_TEST_APP_FAMILY_ROOT")
-    fi
     local root candidate stem channel
-    for root in "${roots[@]}"; do
+    while IFS= read -r root; do
         [[ -d "$root" ]] || continue
         for candidate in "$root/$family".[aA][pP][pP] "$root/$family "*.[aA][pP][pP]; do
             [[ -d "$candidate" ]] || continue
@@ -1275,14 +1777,75 @@ _mole_app_family_sibling_installed() {
             stem="${stem%.*}"
             [[ "$stem" == "$family" ]] && return 0
             channel="${stem#"$family" }"
-            [[ "$channel" != "$stem" && "$channel" =~ ^(${suffixes})$ ]] && return 0
+            if [[ "$channel" != "$stem" ]]; then
+                [[ "$channel" =~ ^(${suffixes})$ || "$channel" =~ ^\((${suffixes})\)$ ]] && return 0
+            fi
         done
-    done
+    done < <(_mole_app_probe_roots)
     return 1
 }
 
+# 0 when a bundle named exactly <name>.app is installed elsewhere. A folded
+# spelling of "Foo Bar" ("FooBar") names an independent product, so while
+# "FooBar.app" is installed "Application Support/FooBar", its preferences and
+# "~/.config/foobar" are that product's data, not this app's (B1-07). Names
+# compare case-insensitively: the lowercase spellings differ from the bundle
+# name only by case, and a case-sensitive volume must answer like APFS does.
+# With "fold_spaces" as the third argument the comparison also ignores spaces,
+# because "Notion Calendar.app" and the derived leaf "NotionCalendar" are one
+# product spelled two ways (B1-08). Only ever narrows what an uninstall
+# removes.
+_mole_installed_app_exact_name() {
+    local name="${1:-}"
+    local app_path="${2:-}"
+    local fold_spaces="${3:-}"
+    [[ -n "$name" ]] || return 1
+    local name_lower=""
+    mole_ascii_lowercase name_lower "$name"
+    [[ "$fold_spaces" == "fold_spaces" ]] && name_lower="${name_lower// /}"
+    local root candidate stem stem_lower
+    while IFS= read -r root; do
+        [[ -d "$root" ]] || continue
+        for candidate in "$root"/*.[aA][pP][pP]; do
+            [[ -d "$candidate" ]] || continue
+            if [[ -n "$app_path" && -e "$app_path" && "$candidate" -ef "$app_path" ]]; then
+                continue
+            fi
+            stem="${candidate##*/}"
+            stem="${stem%.[aA][pP][pP]}"
+            stem_lower=""
+            mole_ascii_lowercase stem_lower "$stem"
+            [[ "$fold_spaces" == "fold_spaces" ]] && stem_lower="${stem_lower// /}"
+            [[ "$stem_lower" == "$name_lower" ]] && return 0
+        done
+    done < <(_mole_app_probe_roots)
+    return 1
+}
+
+# 0 when the data leaves derived from a bundle leaf may name this app's own
+# folders. "Code" + com.acme.CodeRunner derives "CodeRunner" and "Code
+# Runner", but "CodeRunner.app" is another product, so its Application
+# Support, caches, preferences and saved state are not this app's data
+# (B1-08). One collision keeps the whole derived group, like the folded
+# spellings in B1-07: a leaf that names an installed product proves no
+# ownership for either spelling. Real channels are unaffected: "AyuGram" +
+# one.ayugram.AyuGramDesktop derives "AyuGramDesktop"/"AyuGram Desktop", which
+# name no installed bundle. Only ever narrows what an uninstall removes.
+_mole_uninstall_bundle_leaf_owned() {
+    local app_path="${1:-}"
+    shift
+    local variant
+    for variant in "$@"; do
+        [[ -n "$variant" ]] || continue
+        _mole_installed_app_exact_name "$variant" "$app_path" fold_spaces && return 1
+    done
+    return 0
+}
+
 # The base name an app's family shares: "Zed Nightly" and "Zed" are both "Zed".
-_mole_app_family_suffixes="Nightly|Beta|Alpha|Dev|Canary|Preview|Insider|Edge|Stable|Release|RC|LTS"
+# "Edge" is a product word, not a channel: stripping it from "Microsoft Edge"
+# would turn the shared vendor root "Microsoft" into the family base (B1-01).
+_mole_app_family_suffixes="Nightly|Beta|Alpha|Dev|Canary|Preview|Insider|Stable|Release|RC|LTS"
 _mole_app_family_suffixes+="|Developer Edition|Technology Preview"
 
 # Print the lowercase name leaves ("zed", "zed-nightly"...) of the family that
@@ -1291,7 +1854,9 @@ _mole_app_family_suffixes+="|Developer Edition|Technology Preview"
 _mole_app_family_shared_leaves() {
     local app_name="$1" app_path="${2:-}"
     local base_name="$app_name"
-    if [[ "$app_name" =~ ^(.+)[[:space:]]+(${_mole_app_family_suffixes})$ ]]; then
+    if [[ "$app_name" =~ ^(.+[^[:space:]])[[:space:]]*\((${_mole_app_family_suffixes})\)$ ]] ||
+        [[ "$app_name" =~ ^(.+)-(${_mole_app_family_suffixes})$ ]] ||
+        [[ "$app_name" =~ ^(.+)[[:space:]]+(${_mole_app_family_suffixes})$ ]]; then
         base_name="${BASH_REMATCH[1]}"
     fi
     _mole_app_family_sibling_installed "$base_name" "$app_path" "$_mole_app_family_suffixes" || return 0
@@ -1316,6 +1881,21 @@ _mole_path_is_family_leaf() {
     return 1
 }
 
+# find(1) reads -name as a glob, so an app name cannot be pasted into a pattern:
+# "GoLand [EAP]" becomes the character class "[EAP]" and then matches
+# "GoLand E2024.1" while missing the literal directory, and "Foo[1]_*" claims
+# another app's "Foo1_<UUID>.plist". Escape the backslash first, then every find
+# metacharacter, so the name stays literal in the pattern (B2-08).
+_mole_uninstall_find_name_literal() {
+    local name="${1:-}"
+    [[ -n "$name" ]] || return 1
+    name="${name//\\/\\\\}"
+    name="${name//\*/\\*}"
+    name="${name//\?/\\?}"
+    name="${name//\[/\\[}"
+    printf '%s' "$name"
+}
+
 find_app_files() {
     local bundle_id="$1"
     local app_name="$2"
@@ -1337,22 +1917,58 @@ find_app_files() {
     # Normalize app name for matching - generate all common naming variants
     # Apps use inconsistent naming: "Maestro Studio" vs "maestro-studio" vs "MaestroStudio"
     # Note: Using tr for lowercase conversion (Bash 3.2 compatible, no ${var,,} support)
-    local nospace_name="${app_name// /}"                                                        # "Maestro Studio" -> "MaestroStudio"
-    local underscore_name="${app_name// /_}"                                                    # "Maestro Studio" -> "Maestro_Studio"
-    local hyphen_name="${app_name// /-}"                                                        # "Maestro Studio" -> "Maestro-Studio"
-    local lowercase_name=$(echo "$app_name" | /usr/bin/tr '[:upper:]' '[:lower:]')              # "Zed Nightly" -> "zed nightly"
+    local version_suffixes="Nightly|Beta|Alpha|Dev|Canary|Preview|Insider|Stable|Release|RC|LTS"
+    version_suffixes+="|Developer Edition|Technology Preview"
+
+    # Extract base name by removing common version/channel suffixes.
+    # "Zed Nightly" -> "Zed", "Firefox Developer Edition" -> "Firefox".
+    # Vendors also write channels as "Foo (Beta)" and "Foo-Beta"; both are the
+    # same family as "Foo", and their data often lives under the bare name.
+    # "Edge" is a product word, not a channel: stripping it from "Microsoft
+    # Edge" would derive the vendor root "Microsoft" (Office, Teams,
+    # OneDrive), so it stays out of the table (B1-01).
+    local base_name="$app_name"
+    if [[ "$app_name" =~ ^(.+[^[:space:]])[[:space:]]*\((${version_suffixes})\)$ ]] ||
+        [[ "$app_name" =~ ^(.+)-(${version_suffixes})$ ]] ||
+        [[ "$app_name" =~ ^(.+)[[:space:]]+(${version_suffixes})$ ]]; then
+        base_name="${BASH_REMATCH[1]}"
+    fi
+    # "Microsoft Edge Beta" strips its channel down to the vendor root
+    # "Microsoft". That root is shared by every product of the vendor, so
+    # derive no base-name patterns from it (B1-01).
+    if _mole_uninstall_is_vendor_root_name "$base_name"; then
+        base_name="$app_name"
+    fi
+
+    # A parenthesized channel belongs to the bundle name, not the data path:
+    # "Foo (Beta).app" writes "Foo Beta", "Foo-Beta" or "FooBeta". Fold the
+    # parentheses away before replacing spaces so the variants below reach
+    # those directories instead of "Foo(Beta)"/"Foo-(Beta)"/"Foo_(Beta)".
+    local fold_name="$app_name"
+    # Some bundles spell the word break with the ideographic space (U+3000),
+    # so "Foo　Bar.app" writes its data as "Foo Bar" or "FooBar" while its
+    # literal name keeps the wide character. The folds below replace ASCII
+    # spaces only and [[:space:]] does not reliably see U+3000, so such a
+    # name produced no folded or spaced variant and that data stayed behind
+    # (B2-03). Treat the wide character as a plain space for variant spelling
+    # only; the literal $app_name patterns still target the original bytes.
+    local ideographic_space=$'\xE3\x80\x80'
+    fold_name="${fold_name//$ideographic_space/ }"
+    if [[ "$app_name" =~ ^(.+[^[:space:]])[[:space:]]*\((${version_suffixes})\)$ ]]; then
+        fold_name="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+    fi
+
+    local nospace_name="${fold_name// /}"                                                        # "Maestro Studio" -> "MaestroStudio"
+    local underscore_name="${fold_name// /_}"                                                    # "Maestro Studio" -> "Maestro_Studio"
+    local hyphen_name="${fold_name// /-}"                                                        # "Maestro Studio" -> "Maestro-Studio"
+    # Same names escaped for find -name patterns (B2-08).
+    local app_name_literal="" nospace_name_literal=""
+    app_name_literal=$(_mole_uninstall_find_name_literal "$app_name") || app_name_literal="$app_name"
+    nospace_name_literal=$(_mole_uninstall_find_name_literal "$nospace_name") || nospace_name_literal="$nospace_name"
+    local lowercase_name=$(echo "$fold_name" | /usr/bin/tr '[:upper:]' '[:lower:]')              # "Zed Nightly" -> "zed nightly"
     local lowercase_nospace=$(echo "$nospace_name" | /usr/bin/tr '[:upper:]' '[:lower:]')       # "MaestroStudio" -> "maestrostudio"
     local lowercase_hyphen=$(echo "$hyphen_name" | /usr/bin/tr '[:upper:]' '[:lower:]')         # "Maestro-Studio" -> "maestro-studio"
     local lowercase_underscore=$(echo "$underscore_name" | /usr/bin/tr '[:upper:]' '[:lower:]') # "Maestro_Studio" -> "maestro_studio"
-
-    # Extract base name by removing common version/channel suffixes
-    # "Zed Nightly" -> "Zed", "Firefox Developer Edition" -> "Firefox"
-    local base_name="$app_name"
-    local version_suffixes="Nightly|Beta|Alpha|Dev|Canary|Preview|Insider|Edge|Stable|Release|RC|LTS"
-    version_suffixes+="|Developer Edition|Technology Preview"
-    if [[ "$app_name" =~ ^(.+)[[:space:]]+(${version_suffixes})$ ]]; then
-        base_name="${BASH_REMATCH[1]}"
-    fi
     local base_lowercase=$(echo "$base_name" | /usr/bin/tr '[:upper:]' '[:lower:]') # "Zed" -> "zed"
 
     # Only use bundle_id in literal paths or find patterns after reverse-DNS
@@ -1369,16 +1985,32 @@ find_app_files() {
     # dotdir (or dotfile ending in rc) from the display name: names such as Local
     # and Docker collide with shared CLI/config roots on case-insensitive APFS.
     # App-specific top-level dotdirs require an explicit product rule below.
+    # A one- or two-character name is a leaf many unrelated products already
+    # own: "Go.app" spelled ~/.cache/go, ~/.config/go and ~/.local/share/go
+    # (the Go toolchain's build cache and `go env` config), and "QQ.app"
+    # spelled ~/Library/Caches/QQ, which review.sh deletes without asking.
+    # Below three characters a bare name proves no owner, so only bundle-id
+    # patterns may claim these leaves (B1-06); those ids still reach the same
+    # app exactly, and a name this short keeps its own folders when its id
+    # names them.
     local -a user_patterns=()
-    if [[ -n "$app_name" && ${#app_name} -ge 2 ]]; then
+    if [[ -n "$app_name" && ${#app_name} -ge 3 ]]; then
+        # A name alone cannot prove the data leaf is this bundle's: an
+        # unrelated app whose display name spells a product or vendor word
+        # ("Code", "Microsoft") would claim that word's shared root. Leave
+        # every name-derived leaf to the bundle-id patterns and to the product
+        # rules below, which prove the owner (B1-05).
+        if ! _mole_uninstall_is_shared_product_name "$app_name"; then
+            user_patterns+=(
+                "$HOME/Library/Application Support/$app_name"
+                "$HOME/Library/Caches/$app_name"
+                "$HOME/Library/Logs/$app_name"
+                "$HOME/Library/Preferences/$app_name"
+                "$HOME/Library/Preferences/$app_name.plist"
+                "$HOME/Library/Saved Application State/$app_name.savedState"
+            )
+        fi
         user_patterns+=(
-            "$HOME/Library/Application Support/$app_name"
-            "$HOME/Library/Caches/$app_name"
-            "$HOME/Library/Logs/$app_name"
-            "$HOME/Library/Preferences/$app_name"
-            "$HOME/Library/Preferences/$app_name.plist"
-            "$HOME/Library/Saved Application State/$app_name.savedState"
-
             "$HOME/Library/Services/$app_name.workflow"
             "$HOME/Library/QuickLook/$app_name.qlgenerator"
             "$HOME/Library/Internet Plug-Ins/$app_name.plugin"
@@ -1448,12 +2080,22 @@ find_app_files() {
             "$HOME/Library/Caches/SentryCrash/$app_name"
             "$HOME/Library/Caches/KSCrash/$app_name"
         )
-        local updater_name
-        for updater_name in "$hyphen_name" "$lowercase_hyphen" "$nospace_name" "$lowercase_nospace"; do
-            user_patterns+=(
-                "$HOME/Library/Caches/$updater_name-updater"
-                "$HOME/Library/Application Support/Caches/$updater_name-updater"
-            )
+    fi
+
+    # An electron-updater "<name>-updater" cache belongs to one Squirrel/
+    # electron-updater product, not to every app whose display name happens to
+    # spell that product ("Arc.app", "Code.app", "Zoom.app"): the real owner
+    # keeps the directory, and Caches/* is removed without a prompt. Only the
+    # updater cache name the bundle itself declares counts; when it declares
+    # none there is no ownership evidence, so the directory stays (B1-09).
+    local declared_updater=""
+    declared_updater=$(_mole_uninstall_declared_updater_dir "$app_path") || declared_updater=""
+    if [[ -n "$declared_updater" ]]; then
+        local candidate_updater=""
+        for candidate_updater in "$HOME/Library/Caches/$declared_updater" \
+            "$HOME/Library/Application Support/Caches/$declared_updater"; do
+            _mole_uninstall_installed_app_owns_updater "$candidate_updater" "$app_path" || continue
+            user_patterns+=("$candidate_updater")
         done
     fi
 
@@ -1469,6 +2111,9 @@ find_app_files() {
     # display name (case-insensitive, APFS is too) and continuing at an
     # uppercase-or-digit word boundary. Only two literal-path variants come
     # out: the raw leaf and the split that keeps the display name intact.
+    # Those literals still name another product's folders while a bundle of
+    # that exact name is installed, so the derivation also asks the installed
+    # name probe (B1-08).
     if [[ "$bundle_id_valid" == "true" && ${#app_name} -ge 3 ]]; then
         local bundle_leaf="${bundle_id##*.}"
         local app_name_nospace="${app_name// /}"
@@ -1487,6 +2132,8 @@ find_app_files() {
                 local bundle_leaf_variant
                 for bundle_leaf_variant in "$bundle_leaf" "$app_name $bundle_leaf_rest_spaced"; do
                     [[ "$bundle_leaf_variant" != "$app_name" ]] || continue
+                    _mole_uninstall_bundle_leaf_owned "$app_path" \
+                        "$bundle_leaf_variant" || continue
                     user_patterns+=(
                         "$HOME/Library/Application Support/$bundle_leaf_variant"
                         "$HOME/Library/Caches/$bundle_leaf_variant"
@@ -1501,43 +2148,123 @@ find_app_files() {
 
     # Add all naming variants to cover inconsistent app directory naming
     # Issue #377: Apps create directories with various naming conventions
-    if [[ ${#app_name} -gt 3 && "$app_name" =~ [[:space:]] ]]; then
+    if [[ ${#fold_name} -gt 3 && "$fold_name" =~ [[:space:]] ]]; then
+        # A compound spelling can collapse back to a product or vendor root:
+        # "Microsoft " folds to "Microsoft", and "Code Beta" -> "CodeBeta" is
+        # only a new name when it has not lost its word. Each variant therefore
+        # passes the same shared-name check as the display name (B1-05).
+        # A folded spelling also names an independent product while that
+        # product's own bundle is installed: "FooBar.app" owns every folder
+        # spelled "FooBar"/"foo-bar"/"foo_bar", so one collision keeps the
+        # whole folded group (B1-07). The probe folds case, so it covers the
+        # lowercase spellings too.
+        local -a compound_patterns=()
+        if _mole_uninstall_folded_name_owned "$app_path" \
+            "$nospace_name" "$underscore_name" "$hyphen_name"; then
+            compound_patterns+=(
+                # Compound naming (MaestroStudio, Maestro_Studio, Maestro-Studio)
+                "$HOME/Library/Application Support/$nospace_name"
+                "$HOME/Library/Caches/$nospace_name"
+                "$HOME/Library/Logs/$nospace_name"
+                "$HOME/Library/Preferences/$nospace_name"
+                "$HOME/Library/Preferences/$nospace_name.plist"
+                "$HOME/Library/Saved Application State/$nospace_name.savedState"
+                "$HOME/Library/Application Support/$underscore_name"
+                "$HOME/Library/Preferences/$underscore_name"
+                "$HOME/Library/Preferences/$underscore_name.plist"
+                "$HOME/Library/Application Support/$hyphen_name"
+                "$HOME/Library/Preferences/$hyphen_name"
+                "$HOME/Library/Preferences/$hyphen_name.plist"
+                # Lowercase variants (maestrostudio, maestro-studio, maestro_studio)
+                "$HOME/.config/$lowercase_nospace"
+                "$HOME/.config/$lowercase_hyphen"
+                "$HOME/.config/$lowercase_underscore"
+                "$HOME/.cache/$lowercase_nospace"
+                "$HOME/.cache/$lowercase_hyphen"
+                "$HOME/.cache/$lowercase_underscore"
+                "$HOME/.local/share/$lowercase_nospace"
+                "$HOME/.local/share/$lowercase_hyphen"
+                "$HOME/.local/share/$lowercase_underscore"
+            )
+        fi
+        user_patterns+=("${compound_patterns[@]+"${compound_patterns[@]}"}")
+    fi
+
+    # A dotted display name ("Foo.Bar") also reaches a dotless product leaf:
+    # the app, its caches and its preferences are often spelled "FooBar" on
+    # disk, and the fold above only replaces spaces, so a dot produced no
+    # variant at all (B2-04). The dotless group passes the same folded-name
+    # guard as a spaced name: it must not collapse to a shared product root
+    # (B1-05) and no installed bundle may carry that exact name, because
+    # "FooBar.app" owns every "FooBar"/"Foo-Bar"/"Foo_Bar" spelling (B1-07).
+    # Only an interior dot between two non-dot characters is folded; ".Foo",
+    # "Foo." and "Foo..Bar" spell no product name. No XDG paths are derived
+    # here: a dotless lowercase CLI root would need its own ownership proof.
+    if [[ ${#fold_name} -gt 3 && "$fold_name" =~ [^.]\.[^.] &&
+        "$fold_name" != *[/\\]* && ! "$fold_name" =~ [[:cntrl:]] ]]; then
+        local dot_nospace="${nospace_name//./}"
+        local dot_underscore="${nospace_name//./_}"
+        local dot_hyphen="${nospace_name//./-}"
+        if _mole_uninstall_folded_name_owned "$app_path" \
+            "$dot_nospace" "$dot_underscore" "$dot_hyphen"; then
+            user_patterns+=(
+                "$HOME/Library/Application Support/$dot_nospace"
+                "$HOME/Library/Caches/$dot_nospace"
+                "$HOME/Library/Logs/$dot_nospace"
+                "$HOME/Library/Preferences/$dot_nospace"
+                "$HOME/Library/Preferences/$dot_nospace.plist"
+                "$HOME/Library/Saved Application State/$dot_nospace.savedState"
+                "$HOME/Library/Application Support/$dot_underscore"
+                "$HOME/Library/Preferences/$dot_underscore"
+                "$HOME/Library/Preferences/$dot_underscore.plist"
+                "$HOME/Library/Application Support/$dot_hyphen"
+                "$HOME/Library/Preferences/$dot_hyphen"
+                "$HOME/Library/Preferences/$dot_hyphen.plist"
+            )
+        fi
+    fi
+
+    # The folded spaced form itself is a real directory name ("Foo Beta");
+    # the direct patterns above only spell it with parentheses. The same block
+    # carries the ASCII-spaced spelling of an ideographic-space name
+    # ("Foo　Bar" -> "Foo Bar", B2-03). While another installed bundle already
+    # carries that exact spaced name it owns the spaced folders (B1-07), so
+    # the whole block stays off.
+    if [[ "$fold_name" != "$app_name" && ${#fold_name} -gt 3 ]] &&
+        _mole_uninstall_folded_spelling_owned "$fold_name" "$app_path"; then
+        if ! _mole_uninstall_is_shared_product_name "$fold_name"; then
+            user_patterns+=(
+                "$HOME/Library/Application Support/$fold_name"
+                "$HOME/Library/Caches/$fold_name"
+                "$HOME/Library/Logs/$fold_name"
+                "$HOME/Library/Preferences/$fold_name"
+                "$HOME/Library/Preferences/$fold_name.plist"
+                "$HOME/Library/Saved Application State/$fold_name.savedState"
+            )
+        fi
         user_patterns+=(
-            # Compound naming (MaestroStudio, Maestro_Studio, Maestro-Studio)
-            "$HOME/Library/Application Support/$nospace_name"
-            "$HOME/Library/Caches/$nospace_name"
-            "$HOME/Library/Logs/$nospace_name"
-            "$HOME/Library/Preferences/$nospace_name"
-            "$HOME/Library/Preferences/$nospace_name.plist"
-            "$HOME/Library/Saved Application State/$nospace_name.savedState"
-            "$HOME/Library/Application Support/$underscore_name"
-            "$HOME/Library/Application Support/$hyphen_name"
-            "$HOME/Library/Preferences/$underscore_name"
-            "$HOME/Library/Preferences/$underscore_name.plist"
-            "$HOME/Library/Preferences/$hyphen_name"
-            "$HOME/Library/Preferences/$hyphen_name.plist"
-            # Lowercase variants (maestrostudio, maestro-studio, maestro_studio)
-            "$HOME/.config/$lowercase_nospace"
-            "$HOME/.config/$lowercase_hyphen"
-            "$HOME/.config/$lowercase_underscore"
-            "$HOME/.cache/$lowercase_nospace"
-            "$HOME/.cache/$lowercase_hyphen"
-            "$HOME/.cache/$lowercase_underscore"
-            "$HOME/.local/share/$lowercase_nospace"
-            "$HOME/.local/share/$lowercase_hyphen"
-            "$HOME/.local/share/$lowercase_underscore"
+            "$HOME/.config/$lowercase_name"
+            "$HOME/.cache/$lowercase_name"
+            "$HOME/.local/share/$lowercase_name"
         )
     fi
 
     # Add base name variants for versioned apps (e.g., "Zed Nightly" -> check for "zed")
     if [[ "$base_name" != "$app_name" && ${#base_name} -gt 2 ]]; then
+        # Same rule as the display name above: a derived base that only names a
+        # product or vendor root ("Code Nightly" -> "Code") does not prove that
+        # root belongs to this bundle (B1-05).
+        if ! _mole_uninstall_is_shared_product_name "$base_name"; then
+            user_patterns+=(
+                "$HOME/Library/Application Support/$base_name"
+                "$HOME/Library/Caches/$base_name"
+                "$HOME/Library/Logs/$base_name"
+                "$HOME/Library/Preferences/$base_name"
+                "$HOME/Library/Preferences/$base_name.plist"
+                "$HOME/Library/Saved Application State/$base_name.savedState"
+            )
+        fi
         user_patterns+=(
-            "$HOME/Library/Application Support/$base_name"
-            "$HOME/Library/Caches/$base_name"
-            "$HOME/Library/Logs/$base_name"
-            "$HOME/Library/Preferences/$base_name"
-            "$HOME/Library/Preferences/$base_name.plist"
-            "$HOME/Library/Saved Application State/$base_name.savedState"
             "$HOME/.config/$base_lowercase"
             "$HOME/.cache/$base_lowercase"
             "$HOME/.local/share/$base_lowercase"
@@ -1647,7 +2374,10 @@ find_app_files() {
                 return "$discovery_scan_rc"
             fi
             while IFS= read -r -d '' pref; do
-                if mole_name_starts_with_bundle_id_boundary "$pref" "$bundle_id"; then
+                # A dot boundary is not enough here: "<id>.<other product>.<uuid>"
+                # is another bundle's domain, so the only suffix a ByHost file
+                # may carry is the host UUID (B1-15).
+                if mole_uninstall_byhost_plist_owned "$pref" "$bundle_id"; then
                     files_to_clean+=("$pref")
                 fi
             done < "$discovery_scan_file"
@@ -1657,7 +2387,10 @@ find_app_files() {
         local nsurlsession_dl="$HOME/Library/Caches/com.apple.nsurlsessiond/Downloads/$bundle_id"
         [[ -d "$nsurlsession_dl" ]] && files_to_clean+=("$nsurlsession_dl")
 
-        # Group Containers (special handling)
+        # Group Containers (special handling). A group container is shared by
+        # every app of the team that declares it, so only "<id>" and
+        # "<TeamID>.<id>" are claimed; "*.<id>.*" names another product's or a
+        # sibling app's group (B1-04).
         if [[ -d ~/Library/Group\ Containers ]]; then
             discovery_scan_rc=0
             _mole_uninstall_materialize_find0 "$discovery_scan_file" \
@@ -1668,9 +2401,8 @@ find_app_files() {
                 return "$discovery_scan_rc"
             fi
             while IFS= read -r -d '' container; do
-                if mole_name_has_bundle_id_boundary "$container" "$bundle_id"; then
-                    files_to_clean+=("$container")
-                fi
+                _mole_uninstall_group_container_owned "$container" "$bundle_id" || continue
+                files_to_clean+=("$container")
             done < "$discovery_scan_file"
         fi
 
@@ -1685,6 +2417,17 @@ find_app_files() {
         local derived_path=""
         local existing_path=""
         local already_added=false
+        # "<id>.<suffix>" roots are only the app's own helpers when the suffix
+        # completes an embedded bundle id. Com.apple.Foo.Bar or
+        # com.acme.Foo.helper may belong to a different product (B1-03), so
+        # without an installed app the embedded set stays empty and those
+        # prefix-only roots are skipped.
+        local derived_embedded_ids=""
+        local derived_ownership_check="false"
+        if [[ -n "$app_path" && -d "$app_path" && "$app_path" == */*.app ]]; then
+            derived_ownership_check="true"
+            derived_embedded_ids=$(_mole_uninstall_bundle_ids_under_contents "$app_path") || derived_embedded_ids=""
+        fi
         for derived_root in "${derived_bundle_roots[@]}"; do
             [[ -d "$derived_root" ]] || continue
             discovery_scan_rc=0
@@ -1696,6 +2439,10 @@ find_app_files() {
             fi
             while IFS= read -r -d '' derived_path; do
                 mole_name_has_bundle_id_boundary "$derived_path" "$bundle_id" || continue
+                if [[ "$derived_ownership_check" == "true" ]]; then
+                    _mole_uninstall_derived_root_owned "$derived_path" "$bundle_id" \
+                        "$derived_embedded_ids" || continue
+                fi
                 already_added=false
                 if [[ ${#files_to_clean[@]} -gt 0 ]]; then
                     for existing_path in "${files_to_clean[@]}"; do
@@ -1816,6 +2563,11 @@ find_app_files() {
                     return "$discovery_scan_rc"
                 fi
                 while IFS= read -r -d '' embedded_candidate; do
+                    # Same ByHost shape check as the primary id: an embedded
+                    # id's "<id>.*.plist" would otherwise claim the preferences
+                    # of com.acme.Foo.Bar when the extension is com.acme.Foo
+                    # (B1-15).
+                    mole_uninstall_byhost_plist_owned "$embedded_candidate" "$embedded_id" || continue
                     files_to_clean+=("$embedded_candidate")
                 done < "$discovery_scan_file"
             fi
@@ -1906,13 +2658,18 @@ find_app_files() {
     fi
 
     # 2. Android Studio (Google)
+    # Ownership, not a name substring: "NotAndroid Studio.app" and "Android
+    # Paint Studio.app" are different products, and ~/.android holds the
+    # Android SDK's own user state (B1-12).
     if [[ "$collect_toolchain_leftovers" == "true" ]] &&
-        { [[ "$app_name" =~ Android.*Studio|android.*studio ]] || [[ "$bundle_id" =~ google.*android.*studio|jetbrains.*android ]]; }; then
+        _mole_uninstall_android_studio_owned "$app_path" "$bundle_id"; then
         # Skipped: ~/AndroidStudioProjects (project source), ~/Library/Android
         # (SDK installs, multi-GB), ~/.android root (debug.keystore signing
         # key, adbkey device pairing, avd/ images). Only sweep regenerable
-        # caches under ~/.android.
-        for d in ~/.android/cache ~/.android/build-cache ~/.android/breakpad; do
+        # caches under ~/.android. ~/.android/build-cache is Gradle's cache for
+        # every Gradle project on the machine, not an Android Studio leaf, so
+        # it stays (B1-12).
+        for d in ~/.android/cache ~/.android/breakpad; do
             [[ -d "$d" ]] && files_to_clean+=("$d")
         done
         if [[ -d ~/Library/Application\ Support/Google ]]; then
@@ -1932,8 +2689,11 @@ find_app_files() {
     fi
 
     # 3. Xcode (Apple)
+    # Ownership, not a name substring: "XcodeBuild Helper.app" and "Xcode
+    # Clean.app" are different products, and these caches hold every
+    # project's build products plus the user's device support (B1-11).
     if [[ "$collect_toolchain_leftovers" == "true" ]] &&
-        { [[ "$app_name" =~ Xcode|xcode ]] || [[ "$bundle_id" =~ apple.*xcode ]]; }; then
+        _mole_uninstall_xcode_owned "$app_path" "$bundle_id"; then
         # Skipped: ~/Library/Developer root (Toolchains, Archives, UserData,
         # CoreSimulator/Devices, provisioning profiles). Only sweep
         # regenerable build/device caches.
@@ -1952,19 +2712,50 @@ find_app_files() {
     fi
 
     # 4. JetBrains (IDE settings)
-    if [[ "$collect_toolchain_leftovers" == "true" ]] &&
-        { [[ "$bundle_id" =~ jetbrains ]] || [[ "$app_name" =~ IntelliJ|PyCharm|WebStorm|GoLand|RubyMine|PhpStorm|CLion|DataGrip|Rider ]]; }; then
+    # Only JetBrains' own com.jetbrains.* bundle may claim these roots. The
+    # name arm used to accept any app called "Rider" or "PyCharm", so an
+    # unrelated Rider.app (com.acme.rider) took the real IDE's
+    # .../JetBrains/Rider2024.1 -- keymaps, plugins and licence state (B1-13),
+    # and an id that merely contains "jetbrains" (com.notjetbrains.rider) was
+    # no better. Everything else keeps only its exact bundle-id paths.
+    local jetbrains_name_owner=""
+    mole_ascii_lowercase jetbrains_name_owner "$bundle_id"
+    if [[ "$collect_toolchain_leftovers" == "true" &&
+        "$jetbrains_name_owner" == com.jetbrains.* ]]; then
+        # JetBrains stores its settings under a compact product code, not the
+        # display name: "IntelliJ IDEA" writes "IntelliJIdea2024.1" and the
+        # Community bundle (com.jetbrains.intellij.ce) writes "IdeaIC2024.1".
+        # The literal name pattern kept the space and the wrong case, so it
+        # never matched either, and the selector fallback below is absent on
+        # CE, EAP and repackaged builds (B2-02). The compact display name plus
+        # these exact bundle-id product codes are ownership facts; every
+        # candidate still has to pass the versioned-product boundary.
+        # The literal display name stays first, so a bracketed or spaced
+        # product leaf ("GoLand [EAP]2024.1") still matches as before (B2-08).
+        local -a jetbrains_codes=("$app_name" "$nospace_name")
+        case "$jetbrains_name_owner" in
+            com.jetbrains.intellij) jetbrains_codes+=("IntelliJIdea") ;;
+            com.jetbrains.intellij.ce) jetbrains_codes+=("IdeaIC") ;;
+        esac
         for base in ~/Library/Application\ Support/JetBrains ~/Library/Caches/JetBrains ~/Library/Logs/JetBrains; do
             [[ -d "$base" ]] || continue
             discovery_scan_rc=0
             _mole_uninstall_materialize_find0 "$discovery_scan_file" \
-                "$base" -maxdepth 1 -name "${app_name}*" -print0 || discovery_scan_rc=$?
+                "$base" -mindepth 1 -maxdepth 1 -print0 || discovery_scan_rc=$?
             if [[ $discovery_scan_rc -ne 0 ]]; then
                 rm -f -- "$discovery_scan_file" 2> /dev/null || true # SAFE: exact tracked temp file created above
                 return "$discovery_scan_rc"
             fi
             while IFS= read -r -d '' d; do
-                _mole_uninstall_versioned_product_matches "${d##*/}" "$app_name" || continue
+                local jetbrains_owned="false" jetbrains_code=""
+                for jetbrains_code in "${jetbrains_codes[@]}"; do
+                    [[ -n "$jetbrains_code" ]] || continue
+                    if _mole_uninstall_versioned_product_matches "${d##*/}" "$jetbrains_code"; then
+                        jetbrains_owned="true"
+                        break
+                    fi
+                done
+                [[ "$jetbrains_owned" == "true" ]] || continue
                 files_to_clean+=("$d")
             done < "$discovery_scan_file"
         done
@@ -1994,31 +2785,41 @@ find_app_files() {
         fi
     fi
 
-    # Unity and Epic roots hold shared engines, assets and licence state.
-    # An app uninstall cannot claim them; exact per-app caches above remain.
+    # Unity, Epic and Godot roots hold shared engines, assets, project saves
+    # and licence state; app_userdata/<project> alone is every Godot game's
+    # save data. An app uninstall cannot claim them -- not the editor and not
+    # an exported game whose name merely contains "godot" -- and
+    # should_protect_path refuses the root whichever rule reaches it. Exact
+    # per-app caches under the bundle id above remain (B1-02).
     # 5. Godot
-    if [[ "$collect_toolchain_leftovers" == "true" ]]; then
-        [[ "$app_name" =~ Godot|godot ]] && [[ -d ~/Library/Application\ Support/Godot ]] && files_to_clean+=("$HOME/Library/Application Support/Godot")
-    fi
+    #    No name rule: ~/Library/Application Support/Godot is shared (B1-02).
 
     # 6. Tools
     # VS Code stores user data under folder names that don't match the app name
     # ("Visual Studio Code") or bundle id ("com.microsoft.VSCode"). The folder is
     # named "Code" (stable) or "Code - Insiders". Cover both channels explicitly
     # so uninstall removes them. Issue #850.
-    if [[ "$bundle_id" =~ microsoft.*[vV][sS][cC]ode ]]; then
-        [[ -d "$HOME/Library/Caches/com.microsoft.VSCode.ShipIt" ]] && files_to_clean+=("$HOME/Library/Caches/com.microsoft.VSCode.ShipIt")
-        [[ -d "$HOME/Library/Caches/com.microsoft.VSCodeInsiders.ShipIt" ]] && files_to_clean+=("$HOME/Library/Caches/com.microsoft.VSCodeInsiders.ShipIt")
-        if [[ "$bundle_id" =~ [iI]nsiders ]]; then
-            [[ -d "$HOME/.vscode-insiders" ]] && files_to_clean+=("$HOME/.vscode-insiders")
-            [[ -d "$HOME/Library/Application Support/Code - Insiders" ]] && files_to_clean+=("$HOME/Library/Application Support/Code - Insiders")
-            [[ -d "$HOME/Library/Caches/com.microsoft.VSCodeInsiders" ]] && files_to_clean+=("$HOME/Library/Caches/com.microsoft.VSCodeInsiders")
-        else
+    # Only these two product ids own that layout. The old unanchored
+    # /microsoft.*vscode/ matched any id that merely spelled it, so uninstalling
+    # a helper component such as com.microsoft.VSCode.ShipIt queued the whole
+    # stable profile -- Application Support/Code (extensions, settings,
+    # globalStorage) and ~/.vscode -- and the stable run queued the Insiders
+    # Squirrel cache as well (B1-14). Each channel keeps only its own leaves;
+    # "$bundle_id.ShipIt" above already adds that channel's updater cache.
+    local vscode_bundle_lower=""
+    mole_ascii_lowercase vscode_bundle_lower "$bundle_id"
+    case "$vscode_bundle_lower" in
+        com.microsoft.vscode)
             [[ -d "$HOME/.vscode" ]] && files_to_clean+=("$HOME/.vscode")
             [[ -d "$HOME/Library/Application Support/Code" ]] && files_to_clean+=("$HOME/Library/Application Support/Code")
             [[ -d "$HOME/Library/Caches/com.microsoft.VSCode" ]] && files_to_clean+=("$HOME/Library/Caches/com.microsoft.VSCode")
-        fi
-    fi
+            ;;
+        com.microsoft.vscodeinsiders)
+            [[ -d "$HOME/.vscode-insiders" ]] && files_to_clean+=("$HOME/.vscode-insiders")
+            [[ -d "$HOME/Library/Application Support/Code - Insiders" ]] && files_to_clean+=("$HOME/Library/Application Support/Code - Insiders")
+            [[ -d "$HOME/Library/Caches/com.microsoft.VSCodeInsiders" ]] && files_to_clean+=("$HOME/Library/Caches/com.microsoft.VSCodeInsiders")
+            ;;
+    esac
     # Docker: ~/.docker holds config.json (Docker Hub auth tokens), contexts/
     # (kubeconfig-style endpoints, possibly with credentials), and cli-plugins.
     # Only sweep regenerable cache subtrees, never the whole tree.
@@ -2054,26 +2855,34 @@ find_app_files() {
     fi
 
     # 7. Raycast
+    # Raycast's own leftovers are named after its bundle id ("com.raycast.macos"
+    # plus its helper containers) or its product name, which the app-name
+    # patterns above already cover. The old bare "*raycast*" sweep claimed any
+    # directory that merely spelled the product -- another vendor's container
+    # or script folder such as com.thirdparty.raycast-helper, a
+    # "RaycastBeta" channel folder -- and it looked two levels into Caches, so
+    # it reached caches nested under unrelated vendor roots. Anchor the scan to
+    # the bundle id's dot boundary and drop the depth-two sweep; an ambiguous
+    # name is left on disk rather than guessed at (B1-10).
     if [[ "$bundle_id" == "com.raycast.macos" ]]; then
-        # Standard user directories
-        local raycast_dirs=(
-            "$HOME/Library/Application Support"
-            "$HOME/Library/Application Scripts"
-            "$HOME/Library/Containers"
-        )
-        # Raycast v2 ships as a separate app (bundle id com.raycast-x.macos);
-        # exclude its directories from every v1 "*raycast*" sweep (#1202).
-        for dir in "${raycast_dirs[@]}"; do
-            [[ -d "$dir" ]] || continue
+        local raycast_dir
+        for raycast_dir in \
+            "$HOME/Library/Application Support" \
+            "$HOME/Library/Application Scripts" \
+            "$HOME/Library/Containers"; do
+            [[ -d "$raycast_dir" ]] || continue
             discovery_scan_rc=0
             _mole_uninstall_materialize_find0 "$discovery_scan_file" \
-                "$dir" -maxdepth 1 -type d -iname "*raycast*" \
-                ! -iname "*raycast-x*" -print0 || discovery_scan_rc=$?
+                "$raycast_dir" -maxdepth 1 -type d -print0 || discovery_scan_rc=$?
             if [[ $discovery_scan_rc -ne 0 ]]; then
                 rm -f -- "$discovery_scan_file" 2> /dev/null || true # SAFE: exact tracked temp file created above
                 return "$discovery_scan_rc"
             fi
+            # Raycast v2 (com.raycast-x.macos) shares neither prefix nor
+            # name, so the bundle-id boundary keeps its directories out while
+            # the app's own helper containers stay (#1202).
             while IFS= read -r -d '' p; do
+                mole_name_starts_with_bundle_id_boundary "$p" "$bundle_id" || continue
                 files_to_clean+=("$p")
             done < "$discovery_scan_file"
         done
@@ -2081,52 +2890,55 @@ find_app_files() {
         # Explicit Raycast container directories (hardcoded leftovers)
         [[ -d "$HOME/Library/Containers/com.raycast.macos.BrowserExtension" ]] && files_to_clean+=("$HOME/Library/Containers/com.raycast.macos.BrowserExtension")
         [[ -d "$HOME/Library/Containers/com.raycast.macos.RaycastAppIntents" ]] && files_to_clean+=("$HOME/Library/Containers/com.raycast.macos.RaycastAppIntents")
-
-        # Cache (deeper search)
-        if [[ -d "$HOME/Library/Caches" ]]; then
-            discovery_scan_rc=0
-            _mole_uninstall_materialize_find0 "$discovery_scan_file" \
-                "$HOME/Library/Caches" -maxdepth 2 -type d -iname "*raycast*" \
-                ! -iname "*raycast-x*" -print0 || discovery_scan_rc=$?
-            if [[ $discovery_scan_rc -ne 0 ]]; then
-                rm -f -- "$discovery_scan_file" 2> /dev/null || true # SAFE: exact tracked temp file created above
-                return "$discovery_scan_rc"
-            fi
-            while IFS= read -r -d '' p; do
-                files_to_clean+=("$p")
-            done < "$discovery_scan_file"
-        fi
-
-        # VSCode extension storage
-        local vscode_global="$HOME/Library/Application Support/Code/User/globalStorage"
-        if [[ -d "$vscode_global" ]]; then
-            discovery_scan_rc=0
-            _mole_uninstall_materialize_find0 "$discovery_scan_file" \
-                "$vscode_global" -maxdepth 1 -type d -iname "*raycast*" \
-                ! -iname "*raycast-x*" -print0 || discovery_scan_rc=$?
-            if [[ $discovery_scan_rc -ne 0 ]]; then
-                rm -f -- "$discovery_scan_file" 2> /dev/null || true # SAFE: exact tracked temp file created above
-                return "$discovery_scan_rc"
-            fi
-            while IFS= read -r -d '' p; do
-                files_to_clean+=("$p")
-            done < "$discovery_scan_file"
-        fi
     fi
 
-    # CrashReporter plists: named AppName_UUID.plist (not subdirectories)
+    # CrashReporter plists: named AppName_UUID.plist (not subdirectories).
+    # Both prefixes are find patterns, so escape them: an unescaped "Foo[1]_*"
+    # matched a different app's "Foo1_<UUID>.plist" and missed its own (B2-08).
+    # The app name ends at the "_" before the UUID: "Foo_Bar_<UUID>.plist"
+    # starts with "Foo_" but belongs to Foo_Bar.app, and "Foo_Insiders_..."
+    # to an Insiders build. A readable plist whose CFBundleIdentifier names
+    # another app is refused as well; only an unreadable plist keeps the
+    # name-only match, so an ambiguous suffix stays on disk (B1-20).
     local crash_reporter_dir="$HOME/Library/Application Support/CrashReporter"
     if [[ -d "$crash_reporter_dir" && ${#nospace_name} -ge 3 ]]; then
         discovery_scan_rc=0
         _mole_uninstall_materialize_find0 "$discovery_scan_file" \
             "$crash_reporter_dir" -maxdepth 1 -type f \
-            \( -name "${app_name}_*.plist" -o -name "${nospace_name}_*.plist" \) \
+            \( -name "${app_name_literal}_*.plist" -o -name "${nospace_name_literal}_*.plist" \) \
             -print0 || discovery_scan_rc=$?
         if [[ $discovery_scan_rc -ne 0 ]]; then
             rm -f -- "$discovery_scan_file" 2> /dev/null || true # SAFE: exact tracked temp file created above
             return "$discovery_scan_rc"
         fi
+        local app_name_fold="" nospace_name_fold=""
+        mole_ascii_lowercase app_name_fold "$app_name"
+        mole_ascii_lowercase nospace_name_fold "$nospace_name"
         while IFS= read -r -d '' cr; do
+            local cr_leaf="${cr##*/}"
+            local cr_leaf_fold="" cr_rest=""
+            cr_leaf="${cr_leaf%.plist}"
+            # find matches case-insensitively on the default APFS volume, so
+            # compare the name prefix the same way before stripping it.
+            mole_ascii_lowercase cr_leaf_fold "$cr_leaf"
+            if [[ "$cr_leaf_fold" == "$app_name_fold"_* ]]; then
+                cr_rest="${cr_leaf_fold#"$app_name_fold"_}"
+            elif [[ "$cr_leaf_fold" == "$nospace_name_fold"_* ]]; then
+                cr_rest="${cr_leaf_fold#"$nospace_name_fold"_}"
+            else
+                continue
+            fi
+            # Another app's name can contain this one plus "_": only the
+            # UUID suffix (which has no underscore) names this app.
+            [[ "$cr_rest" != *_* ]] || continue
+            if [[ "$bundle_id_valid" == "true" ]]; then
+                local cr_plist_id=""
+                cr_plist_id=$(_mole_uninstall_plist_bundle_id "$cr")
+                if [[ -n "$cr_plist_id" && "$cr_plist_id" != "$bundle_id" ]]; then
+                    debug_log "Skipping CrashReporter plist owned by $cr_plist_id: $cr"
+                    continue
+                fi
+            fi
             files_to_clean+=("$cr")
         done < "$discovery_scan_file"
     fi
@@ -2134,8 +2946,14 @@ find_app_files() {
     # PlayCover keeps per-app settings beside the installed bundle under exact
     # <bundle-id> names, plus the launcher alias (#1715). PlayChain is the
     # app's emulated keychain and stays, like every other keychain store.
+    # Ownership comes from the bundle's own root Info.plist: PlayCover keys
+    # these files by CFBundleIdentifier, so a bundle renamed in Finder
+    # ("原神.app", "Genshin Impact.app") still owns them (B2-06). The folder
+    # name stays as a second proof for a bundle whose plist cannot be read,
+    # which keeps the previous behavior and only ever adds a verified owner.
     if [[ "$bundle_id_valid" == "true" ]] && mole_is_playcover_app "$app_path" &&
-        [[ "${app_path##*/}" == "$bundle_id.app" ]]; then
+        { [[ "${app_path##*/}" == "$bundle_id.app" ]] ||
+            [[ "$(_mole_uninstall_plist_bundle_id "$app_path/Info.plist")" == "$bundle_id" ]]; }; then
         local playcover_root="${app_path%/Applications/*}"
         local playcover_file
         for playcover_file in \
@@ -2200,6 +3018,113 @@ find_app_files() {
     return 0
 }
 
+# Print the leading header of one diagnostic report as printable ASCII, so a
+# binary or corrupt report cannot smuggle control bytes or NUL warnings into
+# the parsers below. Only the first 4096 bytes are read: both the JSON header
+# and the legacy text header name the writer inside that prefix (B1-16).
+_mole_uninstall_report_header() {
+    local report="${1:-}"
+    [[ -f "$report" && ! -L "$report" ]] || return 0
+    head -c 4096 "$report" 2> /dev/null | LC_ALL=C tr -cd '\11\12\15\40-\176' || true
+}
+
+# Print the bundle id a diagnostic report names as its writer. Modern .ips
+# files carry a one-line JSON header with "bundleID"; legacy .crash/.spin/.diag
+# reports carry an "Identifier:" line. Only a bounded prefix is read, and a
+# report with neither field prints nothing, which callers treat as no ownership
+# evidence rather than as proof of another owner (B1-16).
+_mole_uninstall_report_bundle_id() {
+    local report="${1:-}"
+    local header=""
+    header=$(_mole_uninstall_report_header "$report")
+    [[ -n "$header" ]] || return 0
+
+    local bundle_id=""
+    bundle_id=$(printf '%s\n' "$header" | head -n 1 |
+        sed -n 's/.*"bundleID"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    if [[ -z "$bundle_id" ]]; then
+        bundle_id=$(printf '%s\n' "$header" |
+            sed -n 's/^Identifier:[[:space:]]*\([^[:space:]]*\).*/\1/p' | head -n 1)
+    fi
+    [[ -n "$bundle_id" ]] && printf '%s\n' "$bundle_id"
+    return 0
+}
+
+# Print the app bundle leaf a diagnostic report names in its "procPath" (JSON
+# header) or "Path:" (legacy text header) field, for reports that carry no
+# bundle id. The first ".app" component is the owning bundle, so a helper
+# report still resolves to the app that hosts it. Prints nothing when the
+# header names no app bundle (B1-16).
+_mole_uninstall_report_proc_app() {
+    local report="${1:-}"
+    local header="" proc_path=""
+    header=$(_mole_uninstall_report_header "$report")
+    [[ -n "$header" ]] || return 0
+
+    proc_path=$(printf '%s\n' "$header" | head -n 1 |
+        sed -n 's/.*"procPath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    if [[ -z "$proc_path" ]]; then
+        proc_path=$(printf '%s\n' "$header" |
+            sed -n 's/^Path:[[:space:]]*\(.*[^[:space:]]\).*/\1/p' | head -n 1)
+    fi
+    [[ -n "$proc_path" ]] || return 0
+
+    # Split on "/" with parameter expansion alone. An unquoted $proc_path would
+    # pathname-expand first, so a report writing "procPath":"/*.app/..." could
+    # name a file in the current directory and fake ownership (B1-16).
+    local component="" remainder="$proc_path"
+    while [[ -n "$remainder" ]]; do
+        component="${remainder%%/*}"
+        case "$component" in
+            *.app)
+                printf '%s\n' "$component"
+                return 0
+                ;;
+        esac
+        [[ "$remainder" == */* ]] || break
+        remainder="${remainder#*/}"
+    done
+    return 0
+}
+
+# A crash report belongs to this app when its header names this bundle id or a
+# helper/extension id that extends it ("<id>.helper"). A readable id naming any
+# other bundle proves the file only shares this app's name prefix:
+# "Foo-Bar-<date>.ips" belongs to Foo-Bar.app even though it starts with "Foo-"
+# (B1-16). When the header carries no id, the process path must name this app's
+# own bundle. Only a report that proves nothing either way keeps the name-only
+# match, so a legacy or truncated report is not dropped without evidence.
+_mole_uninstall_diagnostic_report_owned() {
+    local report="${1:-}"
+    local bundle_id="${2:-}"
+    local app_bundle_leaf="${3:-}"
+
+    if mole_is_reverse_dns_bundle_id "$bundle_id"; then
+        local report_id=""
+        report_id=$(_mole_uninstall_report_bundle_id "$report")
+        if [[ -n "$report_id" ]]; then
+            local bundle_lower="" report_lower=""
+            mole_ascii_lowercase bundle_lower "$bundle_id"
+            mole_ascii_lowercase report_lower "$report_id"
+            mole_name_starts_with_bundle_id_boundary "$report_lower" "$bundle_lower"
+            return
+        fi
+    fi
+
+    if [[ -n "$app_bundle_leaf" ]]; then
+        local proc_app=""
+        proc_app=$(_mole_uninstall_report_proc_app "$report")
+        if [[ -n "$proc_app" ]]; then
+            local proc_lower="" want_lower=""
+            mole_ascii_lowercase proc_lower "$proc_app"
+            mole_ascii_lowercase want_lower "$app_bundle_leaf"
+            [[ "$proc_lower" == "$want_lower" ]]
+            return
+        fi
+    fi
+    return 0
+}
+
 get_diagnostic_report_paths_for_app() {
     local app_path="$1"
     local app_name="$2"
@@ -2228,13 +3153,31 @@ get_diagnostic_report_paths_for_app() {
     [[ -z "$prefix" || ${#prefix} -lt 3 ]] && return 0
     # The Electron runtime app itself has no reports of its own to claim.
     mole_is_shared_runtime_executable "$prefix" && return 0
-    local -a prefixes=("$prefix")
-    if [[ "$prefix" != *" Helper" ]]; then
-        prefixes+=("$prefix Helper")
+    local -a base_prefixes=("$prefix")
+    # Without a readable CFBundleExecutable the prefix falls back to the bundle
+    # basename with spaces removed ("Foo 2" -> "Foo2"), but crash reports may
+    # keep the basename spaces ("Foo 2-<date>.ips"). Try both; the quoted case
+    # pattern still requires the "."/"_"/"-" separator, so this only narrows
+    # the match to this app's own report names (B2-05).
+    if [[ -z "$exec_name" && "$app_name" != "$prefix" ]]; then
+        base_prefixes+=("$app_name")
     fi
+    local -a prefixes=()
+    local base_prefix
+    for base_prefix in "${base_prefixes[@]}"; do
+        prefixes+=("$base_prefix")
+        [[ "$base_prefix" == *" Helper" ]] || prefixes+=("$base_prefix Helper")
+    done
 
     local dir_abs
     dir_abs=$(cd "$directory" 2> /dev/null && pwd -P 2> /dev/null) || return 0
+    # The bundle's own id decides report ownership; an unreadable id falls back
+    # to the process path, and a report that names neither keeps the name-prefix
+    # match, exactly as before B1-16.
+    local app_bundle_id="" app_bundle_leaf=""
+    app_bundle_id=$(_mole_uninstall_plist_bundle_id "$app_path/Contents/Info.plist")
+    app_bundle_leaf="${app_path##*/}"
+    [[ -n "$app_bundle_leaf" ]] || app_bundle_leaf="${app_name}.app"
     local scan_file=""
     scan_file=$(create_temp_file) || return 1
     local scan_rc=0
@@ -2263,6 +3206,14 @@ get_diagnostic_report_paths_for_app() {
             *.ips | *.crash | *.spin | *.diag) ;;
             *) continue ;;
         esac
+        # A name prefix alone cannot separate "Foo" from "Foo-Bar"/"Foo 2": the
+        # report header records the writer's bundle id, so refuse a file that
+        # names another bundle (B1-16). Only an unreadable or id-less header
+        # keeps the prefix match.
+        if ! _mole_uninstall_diagnostic_report_owned "$f" "$app_bundle_id" "$app_bundle_leaf"; then
+            debug_log "Skipping diagnostic report owned by another bundle: $f"
+            continue
+        fi
         printf '%s\n' "$f"
     done < "$scan_file"
     rm -f -- "$scan_file" 2> /dev/null || true # SAFE: exact tracked temp file created above
@@ -2426,6 +3377,8 @@ find_app_system_files() {
                 local plist_name
                 plist_name=$(basename "$plist")
                 [[ "$plist_name" =~ ^com\.apple\. ]] && continue
+                _mole_uninstall_launchd_label_has_app_name \
+                    "${plist_name%.plist}" "$app_name" || continue
                 system_files+=("$plist")
             done < "$system_scan_file"
         done
@@ -2534,6 +3487,7 @@ find_app_system_files() {
     local combined_files="" system_file
     if [[ ${#system_files[@]} -gt 0 ]]; then
         for system_file in "${system_files[@]}"; do
+            _mole_is_steam_system_library_path "$system_file" && continue
             if [[ ${#family_leaves[@]} -gt 0 ]] &&
                 _mole_path_is_family_leaf "$system_file" "${family_leaves[@]}"; then
                 continue

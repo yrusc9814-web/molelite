@@ -43,9 +43,19 @@ for my $relative (@configs) {
     my $number = 0;
     for my $line (split /\n/, $text) {
         ++$number;
+        # Normalize only the in-memory copy used for matching: JSON escapes
+        # slashes, shells escape spaces, and desktop entries use file URLs.
         $line =~ s{\\/}{/}g;
+        $line =~ s{\\ }/ /g;
+        # Strip only a local file URL's empty/localhost authority, so a foreign
+        # host cannot turn "file://example.com/..." into an absolute path.
+        $line =~ s{file://(?:localhost)?(?=/)}{}g;
         for my $needle (@needles) {
-            if ($line =~ /(?<![A-Za-z0-9_.\/-])\Q$needle\E(?=$|[\/\s"'\)\],;}])/ ) {
+            # A space ends a reference only when it is not followed by more of
+            # the name: "Foo" must not claim "Foo 2", "Foo Bar" or "Foo-Bar".
+            # Full-width punctuation ends a reference too ("微信）"); a following Han character is not a boundary, because that would
+            # make "微信" claim "微信读书".
+            if ($line =~ /(?<![A-Za-z0-9_.\/-])\Q$needle\E(?=\z|[\/"'\)\],;}]|[[:space:]](?![[:space:]]|[A-Za-z0-9_.\/]|-(?=[A-Za-z0-9]))|[）】》」』”’，。、；：！？～（【《「『“‘])/ ) {
                 my $display = "~/$relative";
                 $display =~ s/([\x00-\x1f\x7f])/sprintf('\\x%02x', ord($1))/ge;
                 print "$display:$number\n";

@@ -294,12 +294,101 @@ _extract_cask_token_from_path() {
     token="${path#*/Caskroom/}" # Remove everything up to and including Caskroom/
     token="${token%%/*}"        # Take only the first path component
 
-    # Validate token looks like a valid cask name (lowercase alphanumeric with hyphens)
-    if [[ -n "$token" && "$token" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+    # Validate against Homebrew's real token grammar, the same rule
+    # _mole_brew_info_token_is_storable applies: lowercase alphanumerics plus
+    # "@", ".", "_", "+" and "-". Versioned tokens such as "node@20" and
+    # "libreoffice-language-pack" are ordinary casks, and the narrower rule
+    # made stages 1-3 skip them without a trace. Accepting a token here
+    # authorizes nothing by itself: every caller still requires the token to
+    # be installed and its `brew info` to name the exact selected app.
+    if [[ -n "$token" ]] && _mole_brew_info_token_is_storable "$token"; then
         echo "$token"
         return 0
     fi
 
+    return 1
+}
+
+# Decide whether an installed cask really owns the app the user selected.
+# A matching name is not ownership: another vendor's app can carry the same
+# name and sit at the same /Applications path, so a basename match or a
+# substring of `brew info` output must never authorize `brew uninstall --cask`
+# of that other product. Ownership is proven by the cask's own Caskroom
+# artifact being the same file as the selection, which is what Homebrew's
+# normal /Applications link resolves to, or by `brew info` naming this exact
+# path as the artifact target. When Caskroom stages this token but the selected
+# bundle is not its file, the answer is "not this cask" regardless of text.
+# Args: $1 - cask token, $2 - selected app path, $3 - optional brew info output
+# Returns: 0 when this cask owns the selected app, 1 otherwise
+_mole_brew_info_contradicts_app() {
+    local info_output="$1" app_path="$2" app_name="$3" line listed=false
+    [[ -n "$info_output" ]] || return 1
+    while IFS= read -r line; do
+        case "$line" in
+            "app \""*"\"" | *" (App)")
+                listed=true
+                [[ "$line" == *"$app_path"* || "$line" == *"$app_name"* ]] && return 1
+                ;;
+        esac
+    done <<< "$info_output"
+    [[ "$listed" == true ]]
+}
+
+_mole_brew_cask_owns_app() {
+    local token="$1"
+    local app_path="$2"
+    local info_output="${3:-}"
+    [[ -n "$app_path" ]] || return 1
+    _mole_brew_info_token_is_storable "$token" || return 1
+
+    local app_name="${app_path##*/}"
+    local room artifact staged=false other_artifact=false
+    # One Caskroom root listing per process: inventory runs this per row and
+    # must not rescan the roots each time.
+    if [[ "${_MOLE_BREW_OWNS_ROOTS_READY:-}" != 1 ]]; then
+        _MOLE_BREW_OWNS_ROOTS=$(_mole_brew_caskroom_roots 2> /dev/null || true)
+        _MOLE_BREW_OWNS_ROOTS_READY=1
+    fi
+    while IFS= read -r room; do
+        [[ -n "$room" ]] || continue
+        if [[ -d "$room/$token" ]]; then
+            staged=true
+        fi
+        # Compare by inode, so a renamed app whose cask still links it stays a
+        # cask; a same-name copy never matches either name or any other
+        # artifact under this token.
+        for artifact in "$room/$token"/*/"$app_name" "$room/$token"/*/*.[aA][pP][pP]; do
+            [[ -e "$artifact" ]] || continue
+            other_artifact=true
+            if [[ "$artifact" -ef "$app_path" ]]; then
+                # The link proves the cask staged this bundle, but when brew
+                # info lists app artifacts and none of them is this app, the
+                # two sources disagree; refuse rather than guess (B2-10).
+                _mole_brew_info_contradicts_app "$info_output" "$app_path" "$app_name" && return 1
+                return 0
+            fi
+        done
+    done <<< "$_MOLE_BREW_OWNS_ROOTS"
+    # The staging tree holds an app that is a different file: a same-name
+    # copy is never this cask, whatever brew info prints (B1-18). A staging
+    # tree with no app in it is what Homebrew leaves after moving the app into
+    # place, so that case falls through to the artifact declaration check.
+    [[ "$staged" == true && "$other_artifact" == true ]] && return 1
+
+    # No staging tree under a known Caskroom root (custom prefix, or a cask
+    # that copies its app). Accept only brew info's own artifact declaration
+    # for exactly this path, never a line that merely contains it: the named
+    # target form, an exact path line, or the bare name form whose install
+    # location is fixed at /Applications/<App>.app.
+    local line
+    while IFS= read -r line; do
+        case "$line" in
+            "app \"$app_path\"" | "$app_path" | "$app_path (App)") return 0 ;;
+            "$app_name (App)")
+                [[ "$app_path" == "/Applications/$app_name" ]] && return 0
+                ;;
+        esac
+    done <<< "$info_output"
     return 1
 }
 
@@ -405,13 +494,7 @@ _detect_cask_via_caskroom_search() {
             return 2
         fi
         if [[ -n "$app_path" ]]; then
-            if grep -qF "$app_path" <<< "$info_output"; then
-                :
-            elif [[ "$app_path" == "/Applications/$app_bundle_name" ]] && grep -qF "$app_bundle_name" <<< "$info_output"; then
-                :
-            else
-                return 1
-            fi
+            _mole_brew_cask_owns_app "${uniq[0]}" "$app_path" "$info_output" || return 1
         fi
         echo "${uniq[0]}"
         return 0
@@ -431,6 +514,36 @@ _detect_cask_via_symlink_check() {
     _extract_cask_token_from_path "$target"
 }
 
+# Installed cask tokens whose Caskroom staging app is this exact directory.
+# A cask normally links the app it installs into /Applications, so an inode
+# match identifies the cask that owns the selection no matter what the app is
+# called; matching that name against the token list cannot, because a token is
+# a lowercase slug and names such as "Foo 2", "Foo.Bar" and "Foo（Beta）" never
+# equal one. A cask that copies its app instead of linking never matches and
+# stays with `brew info`. Prints one token per line and never fails: an
+# incomplete inventory prints nothing and the caller keeps its normal
+# fail-closed path.
+# Args: $1 - app path
+_mole_brew_tokens_naming_path() {
+    local app_path="$1"
+    [[ -n "$app_path" && -d "$app_path" ]] || return 0
+    [[ "${_MOLE_BREW_BATCH_ROOM_READY:-0}" == 1 && "${_MOLE_BREW_BATCH_ROOM_RC:-1}" -eq 0 ]] || return 0
+    # Entries carry the Caskroom root they came from, so ownership survives a
+    # Homebrew installed anywhere instead of only the two defaults.
+    local scan_file="${_MOLE_BREW_BATCH_ROOM_FILE:-}"
+    [[ -n "$scan_file" && -f "$scan_file" ]] || return 0
+
+    local match token
+    while IFS= read -r -d '' match; do
+        [[ -L "$match" ]] || continue
+        [[ "$match" -ef "$app_path" ]] || continue
+        token=$(_extract_cask_token_from_path "$match" 2> /dev/null) || continue
+        [[ -n "$token" ]] || continue
+        printf '%s\n' "$token"
+    done < "$scan_file"
+    return 0
+}
+
 # Stage 4: Query brew list --cask and verify with brew info (slowest fallback)
 _detect_cask_via_brew_list() {
     local app_path="$1"
@@ -446,24 +559,55 @@ _detect_cask_via_brew_list() {
     mole_rc_timeout_or_signal "$list_rc" && return "$list_rc"
     [[ $list_rc -eq 0 ]] || return 2
 
-    local cask_name=""
-    cask_name=$(grep -Fix "$app_name_lower" <<< "$cask_list") || return 1
+    # The cask token is the app name only by coincidence. Tokens are lowercase
+    # slugs without spaces, dots or non-ASCII, so "Foo 2.app", "Foo.Bar.app"
+    # and "Foo（Beta）.app" never equal one on a whole-line match. Stages 1-3
+    # pass the real token through; the name lookup below covers the remaining
+    # app that a cask installed but did not link into Caskroom.
+    local -a candidates=()
+    local line token seen
+    # No candidate at all means "not a cask" (1); a candidate whose brew info
+    # could not be read means "undeterminable" (2).
+    local matched="" unresolved=1
+    if line=$(grep -Fix "$app_name_lower" <<< "$cask_list") && [[ -n "$line" ]]; then
+        candidates+=("$line")
+    fi
+    # Every cask probed below is first proven installed, so a token found via
+    # the path search still comes from an authoritative artifact, not a guess.
+    while IFS= read -r token; do
+        [[ -n "$token" ]] || continue
+        seen=false
+        for line in "${candidates[@]+"${candidates[@]}"}"; do
+            [[ "$line" == "$token" ]] && seen=true && break
+        done
+        [[ "$seen" == true ]] || candidates+=("$token")
+    done < <(_mole_brew_tokens_naming_path "$app_path")
 
-    # Verify this cask actually owns this app path or app bundle.
-    local info_output=""
-    local info_rc=0
-    info_output=$(_mole_brew_cask_info "$cask_name" 2> /dev/null) || info_rc=$?
-    mole_rc_timeout_or_signal "$info_rc" && return "$info_rc"
-    [[ $info_rc -eq 0 ]] || return 2
-    if grep -qF "$app_path" <<< "$info_output"; then
-        echo "$cask_name"
+    local cask_name=""
+    for cask_name in "${candidates[@]+"${candidates[@]}"}"; do
+        grep -qxF "$cask_name" <<< "$cask_list" || continue
+        # Verify this cask actually owns this app path or app bundle.
+        local info_output=""
+        local info_rc=0
+        info_output=$(_mole_brew_cask_info "$cask_name" 2> /dev/null) || info_rc=$?
+        mole_rc_timeout_or_signal "$info_rc" && return "$info_rc"
+        # Undeterminable only when no other candidate can answer; a cask brew
+        # cannot read must not hide the one that does own this app.
+        [[ $info_rc -eq 0 ]] || {
+            unresolved=2
+            continue
+        }
+        _mole_brew_cask_owns_app "$cask_name" "$app_path" "$info_output" || continue
+        # Two installed casks naming this exact app is a real ambiguity, not a
+        # licence to uninstall whichever one the listing printed first.
+        [[ -z "$matched" ]] || return 1
+        matched="$cask_name"
+    done
+    if [[ -n "$matched" ]]; then
+        echo "$matched"
         return 0
     fi
-    if [[ "$app_path" == "/Applications/$app_bundle_name" ]] && grep -qF "$app_bundle_name" <<< "$info_output"; then
-        echo "$cask_name"
-        return 0
-    fi
-    return 1
+    return "$unresolved"
 }
 
 # Get Homebrew cask name for an app
