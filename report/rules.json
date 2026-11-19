@@ -20,14 +20,14 @@
     "paths": ["~/.Trash"],
     "match": "~/.Trash 自身被白名单命中即整体跳过（is_path_whitelisted）",
     "default_selected": true,
-    "risk": "high",
+    "risk": "low",
     "needs_admin": false,
-    "action": "delete",
+    "action": "protect",
     "command": null,
     "protected_by": ["P-04"],
     "source": "artifacts/mole-cli/lib/clean/user.sh:43-45",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:785"
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:785 (TrashScanner), :786 (Trasher)（仅同工具：二者是 Swift 类型名，全文无 .Trash 路径字符串）"
   },
   {
     "id": "user_cache-01",
@@ -148,14 +148,16 @@
   {
     "id": "user_cache-07",
     "category": "user_cache",
-    "paths": ["~/Library/Application Support/com.apple.idleassetsd/… 渲染残留（_wallpaper_stale_render_files 判定）"],
-    "match": "仅当渲染文件被判定为陈旧（见 user.sh:1189-1260 的 mtime/在用判定）",
+    "paths": [
+      "~/Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches/com.apple.wallpaper.caches/extension-com.apple.wallpaper.extension.*/*.bmp"
+    ],
+    "match": "只清 ~/Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches/com.apple.wallpaper.caches 下 extension-com.apple.wallpaper.extension.<kind>/ 目录内的一级 *.bmp（普通文件、非符号链接；<kind> 限 64 字符，仅 [a-z0-9.]，其上级路径须逐级为真实目录且非符号链接），并要求文件 mtime 早于 7 天（user.sh:1191-1204、1206、1219、1249）；每种显示尺寸的最新一张与全局最新一张所对应的 digest 一律排除，判定须基于该文件夹的完整 listing（listing 失败/超时或超过 20000 行则整个文件夹不产出候选），每次最多取最旧 50 个后停止（user.sh:1213-1216、1236-1251）。容器本体与其外其它子项不删（user.sh:1191-1195、1268-1270）。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
-    "protected_by": ["P-01", "N-14"],
+    "protected_by": ["P-01"],
     "source": "artifacts/mole-cli/lib/clean/user.sh:1189-1273",
     "in_app": "unknown"
   },
@@ -253,37 +255,49 @@
       "~/Library/Application Support/<app>/DawnGraphiteCache/*",
       "~/Library/Application Support/<app>/DawnWebGPUCache/*",
       "~/Library/Application Support/<app>/Crashpad/completed/*",
-      "~/Library/Application Support/<app>/Cache/*（仅当存在可再生缓存标记）",
-      "~/Library/Application Support/<app>/CachedData/*（同上）"
+      "~/Library/Application Support/<app>/Cache/*",
+      "~/Library/Application Support/<app>/CachedData/*",
+      "~/Library/Group Containers/group.com.apple.contentdelivery/Logs/*",
+      "~/Library/Group Containers/group.com.apple.contentdelivery/Library/Logs/*"
     ],
-    "match": "仅这些可再生子目录；跳过白名单/受保护路径；app 正在运行则整 app 跳过；>100 项的候选整目录批量删，否则逐项（带超时与进度）",
+    "match": "只清 ~/Library/Application Support 下一级 app 目录里 8 个可再生缓存子目录（Code Cache、GPUCache、DawnCache、GrShaderCache、GraphiteDawnCache、DawnGraphiteCache、DawnWebGPUCache、Crashpad/completed）的一级子项，Cache/CachedData 仅在同目录存在上述任一可再生标记时才纳入（user.sh:2750-2765、2649-2666）。白名单/保护路径与关键系统组件跳过；app 目录内 SingletonLock 指向存活 pid 或锁无法读取时整 app 跳过，每个候选删除前再复检一次，无锁的 app 无法判定运行状态（user.sh:2673-2684、2723-2745、2768-2775）。候选 >100 项时整目录 safe_remove（连 Cache 本体一并删，不只是 /*），否则逐项删（0.4s 尺寸测量超时、每 250 项刷新进度）；Group Containers 段只处理 group.com.apple.contentdelivery 的 Logs 与 Library/Logs，策略相同（user.sh:2778-2799、2801-2858、2863-2953）。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01", "P-04"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:2687-2862（候选表 2750-2765）",
+    "source": "artifacts/mole-cli/lib/clean/user.sh:2687-2983",
     "in_app": "unknown"
   },
   {
     "id": "user_cache-14",
     "category": "user_cache",
-    "paths": ["~/Library/Caches/com.apple.rosetta.update", "/Library/Apple/usr/share/rosetta/rosetta_update_bundle", "~/Library/Caches/com.apple.amp.mediasevicesd"],
-    "match": "Apple Silicon 相关缓存；/Library/Apple 路径需 sudo 且受 N-01 保护判定约束",
+    "paths": [
+      "~/Library/Caches/com.apple.rosetta.update",
+      "/Library/Apple/usr/share/rosetta/rosetta_update_bundle",
+      "~/Library/Caches/com.apple.amp.mediasevicesd"
+    ],
+    "match": "仅 Apple Silicon（IS_M_SERIES=true）才执行，非 M 系列直接 return（user.sh:3937-3939）；对 ~/Library/Caches 下 com.apple.rosetta.update 与 com.apple.amp.mediasevicesd 两个缓存目录调用 safe_clean 直接 rm -rf，无需提权（user.sh:3942-3943 → clean.sh:1720-1721 → file_ops.sh:1816）。第三条 /Library/Apple/usr/share/rosetta/rosetta_update_bundle 同样传入 safe_clean（user.sh:3941），但命中 file_ops.sh:1060 的 /Library/Apple/* 关键路径拒删臂，在 file_ops.sh:1367-1369 被 log_error + return 1 拦下，恒被跳过、实际从不删除。",
     "default_selected": true,
     "risk": "medium",
-    "needs_admin": true,
+    "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["N-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:3936-3943",
+    "source": "artifacts/mole-cli/lib/clean/user.sh:3936-3945",
     "in_app": "unknown"
   },
   {
     "id": "user_cache-15",
     "category": "user_cache",
-    "paths": ["iOS/iPadOS 设备固件缓存（clean_cached_device_firmware 判定面：~/Library/iTunes、~/Library/Application Support/MobileSync 等 ipsw）"],
+    "paths": [
+      "~/Library/iTunes/iPhone Software Updates/*.ipsw",
+      "~/Library/iTunes/iPad Software Updates/*.ipsw",
+      "~/Library/iTunes/iPod Software Updates/*.ipsw",
+      "~/Library/iTunes/Apple TV Software Updates/*.ipsw",
+      "~/Library/Group Containers/*.group.com.apple.configurator/**/*.ipsw"
+    ],
     "match": "删除前 _cached_device_firmware_delete_guard（身份绑定 + 在用复核）",
     "default_selected": true,
     "risk": "medium",
@@ -291,22 +305,21 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:2986-3128",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:569 (~/Library/MobileDevice)"
+    "source": "artifacts/mole-cli/lib/clean/user.sh:2986-3122",
+    "in_app": "unknown"
   },
   {
     "id": "user_cache-16",
     "category": "user_cache",
-    "paths": ["~/Library/Handoff / 剪贴板共享缓存（clean_handoff_pasteboard_cache 判定面）"],
-    "match": null,
+    "paths": ["~/Library/Group Containers/group.com.apple.coreservices.useractivityd/shared-pasteboard"],
+    "match": "根目录需存在、不是符号链接且未被白名单命中，否则整段跳过（user.sh:1415-1419）；逐项跳过符号链接与 should_protect_path/白名单命中的子项（user.sh:1425-1429）；find -mindepth 1 -maxdepth 1 -mmin +60 只处理 1 小时前的一级子项，不递归，目录本身不删（user.sh:1448）。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:1413-1465",
+    "source": "artifacts/mole-cli/lib/clean/user.sh:1413-1463",
     "in_app": "unknown"
   },
   {
@@ -322,6 +335,7 @@
       "~/Library/Application Support/Google/Chrome/component_crx_cache/*",
       "~/Library/Application Support/Google/Chrome/ShaderCache/*",
       "~/Library/Application Support/Google/Chrome/GrShaderCache/*",
+      "~/Library/Application Support/Google/Chrome/GraphiteDawnCache/*",
       "~/Library/Application Support/Google/Chrome/Crashpad/completed/*",
       "~/Library/Application Support/Google/Chrome/OptGuideOnDeviceModel/*",
       "~/Library/Application Support/Google/Chrome/OptGuideOnDeviceClassifierModel/*",
@@ -335,8 +349,8 @@
     "command": null,
     "protected_by": ["P-01", "P-12"],
     "source": "artifacts/mole-cli/lib/clean/user.sh:838-867",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:62 (/Library/Caches/Google/Chrome), :103 (/Library/Caches/com.google.Chrome)"
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:62 (/Library/Caches/Google/Chrome)、:103 (/Library/Caches/com.google.Chrome)（仅同工具其他路径）"
   },
   {
     "id": "browser-02",
@@ -371,47 +385,58 @@
   {
     "id": "browser-04",
     "category": "browser",
-    "paths": ["Chrome 旧版本目录（_clean_chromium_old_versions 判定：Chrome 安装目录下的历史版本子目录，保留当前版本）"],
-    "match": "Chrome 未运行 + 版本比对（保留活动版本）",
+    "paths": [
+      "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/*",
+      "~/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/*"
+    ],
+    "match": "仅当 Chrome 未运行时才清理旧版本（is_google_chrome_running 三态：运行中则整族延后、探测未知则打 skipped；每个版本目录删除前再复检两次进程状态）。`Versions` 下 `Current` 符号链接指向的版本、以及比 Current 更新的暂存自动更新版本保留，其余版本目录经保护/白名单/编译缓存三道闸门过滤后逐个删除。`/Applications/Google Chrome.app` 下的旧版本在 SYSTEM_CLEAN=true 且已有 sudo 会话（sudo -n 探测，不弹密码）时走 safe_sudo_remove，这部分需管理员权限；`~/Applications/Google Chrome.app` 下的走 safe_remove。",
     "default_selected": true,
     "risk": "medium",
-    "needs_admin": false,
+    "needs_admin": true,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:605-778,884-901",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:103-104（Chrome 缓存与 Google 目录）"
+    "source": "artifacts/mole-cli/lib/clean/user.sh:605-776, artifacts/mole-cli/lib/clean/user.sh:884-899",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:62,103 (/Library/Caches/Google/Chrome、/Library/Caches/com.google.Chrome)（仅同工具其他路径）"
   },
   {
     "id": "browser-05",
     "category": "browser",
-    "paths": ["Edge 旧版本目录（clean_edge_old_versions）", "Edge Updater 旧版本目录（clean_edge_updater_old_versions）"],
-    "match": "Edge 未运行 + 保留活动版本",
+    "paths": [
+      "/Applications/Microsoft Edge.app/Contents/Frameworks/Microsoft Edge Framework.framework/Versions/*",
+      "~/Applications/Microsoft Edge.app/Contents/Frameworks/Microsoft Edge Framework.framework/Versions/*",
+      "~/Library/Application Support/Microsoft/EdgeUpdater/apps/msedge-stable/*"
+    ],
+    "match": "仅当 Edge 未运行时才清理：`is_microsoft_edge_running` 为三态探测，运行中则整族延后（mole_defer_cleanup_family）、状态未知则打 skipped，每个版本目录删除前再复检两次进程状态。`Versions` 下 `Current` 符号链接指向的版本、以及比 Current 更新的暂存自动更新版本保留，其余版本目录经 should_protect_path／白名单／编译缓存三道闸门过滤后逐个删除。`/Applications/Microsoft Edge.app` 下的旧版本在 SYSTEM_CLEAN=true 且已有 sudo 会话（仅 `sudo -n` 探测，不弹密码）时走 `safe_sudo_remove`，这部分需管理员权限；`~/Applications/Microsoft Edge.app` 下的走 `safe_remove`。EdgeUpdater 段同样要求 Edge 未运行，按已装 Edge 版本保留等于或更新者（取不到已装版本时退回保留 `sort -V` 最新者）。",
     "default_selected": true,
     "risk": "medium",
-    "needs_admin": false,
+    "needs_admin": true,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:902-1050",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:117 (/Library/Caches/com.microsoft.edgemac)"
+    "source": "artifacts/mole-cli/lib/clean/user.sh:605-776, artifacts/mole-cli/lib/clean/user.sh:902-1048",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:117 (/Library/Caches/com.microsoft.edgemac)（仅同工具其他路径）"
   },
   {
     "id": "browser-06",
     "category": "browser",
-    "paths": ["Brave 旧版本目录（clean_brave_old_versions）"],
-    "match": "Brave 未运行 + 保留活动版本",
+    "paths": [
+      "/Applications/Brave Browser.app/Contents/Frameworks/Brave Browser Framework.framework/Versions/*",
+      "~/Applications/Brave Browser.app/Contents/Frameworks/Brave Browser Framework.framework/Versions/*"
+    ],
+    "match": "仅当 Brave 未运行时才清理：is_brave_browser_running（user.sh:791-793 → mole_pgrep_any -x \"Brave Browser\"）为三态探测，运行中则整族延后（mole_defer_cleanup_family）、状态未知则打 skipped（:696-704），每个版本目录删除前再复检两次进程状态（:706-726）。对 /Applications/Brave Browser.app 与 ~/Applications/Brave Browser.app 取 Contents/Frameworks/Brave Browser Framework.framework/Versions 下的一级子目录（:622；MOLE_BRAVE_APP_PATHS 仅在测试模式下覆盖应用路径）；缺少 Versions 目录、缺少 Current 符号链接或其目标不存在时整段跳过，保留 Current、其指向的版本与比 Current 更新的暂存版本（:628-648、:663、:671-682），其余经 should_protect_path／白名单／编译缓存三道闸过滤后逐个删除（:683）。SYSTEM_CLEAN=true 且已有 sudo 会话（仅 sudo -n 探测，不弹密码）时改走 safe_sudo_remove（sudo rm -rf），这部分需管理员权限；否则走 safe_remove（:739-742）。",
     "default_selected": true,
     "risk": "medium",
-    "needs_admin": false,
+    "needs_admin": true,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:1051-1068",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:48-51,91 (BraveSoftware / com.brave.Browser)"
+    "source": "artifacts/mole-cli/lib/clean/user.sh:1051-1066",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:48-51,91 (/Library/Caches/BraveSoftware、/Library/Caches/com.brave.Browser)（仅同工具其他路径）",
+    "secondary_source": "artifacts/mole-cli/lib/clean/user.sh:605-776"
   },
   {
     "id": "browser-07",
@@ -430,7 +455,7 @@
   {
     "id": "browser-08",
     "category": "browser",
-    "paths": ["~/Library/Caches/com.google.Chrome/*"],
+    "paths": ["~/Library/Caches/Google/Chrome/*"],
     "match": "Chrome 进程守卫",
     "default_selected": true,
     "risk": "low",
@@ -438,9 +463,9 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:2136-2140",
+    "source": "artifacts/mole-cli/lib/clean/user.sh:2135-2138",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:103"
+    "in_app_evidence": "report/p1a-strings.json:62"
   },
   {
     "id": "browser-09",
@@ -460,47 +485,100 @@
   {
     "id": "browser-10",
     "category": "browser",
-    "paths": ["~/Library/Caches/company.thebrowser.Browser/*", "~/Library/Application Support/Arc/*/Code Cache/*", "…/Arc/*/GPUCache/* / DawnCache / GrShaderCache / GraphiteDawnCache", "~/Library/Application Support/Arc/ShaderCache/*", "…/Arc/User Data/*/Code Cache|GPUCache|DawnCache|GrShaderCache|GraphiteDawnCache/*", "…/Arc/User Data/component_crx_cache/* / extensions_crx_cache/* / Crashpad/completed/*"],
-    "match": "Arc 未运行（进程守卫）",
+    "paths": [
+      "~/Library/Caches/company.thebrowser.Browser/*",
+      "~/Library/Application Support/Arc/*/Code Cache/*",
+      "~/Library/Application Support/Arc/*/GPUCache/*",
+      "~/Library/Application Support/Arc/*/DawnCache/*",
+      "~/Library/Application Support/Arc/*/GrShaderCache/*",
+      "~/Library/Application Support/Arc/*/GraphiteDawnCache/*",
+      "~/Library/Application Support/Arc/ShaderCache/*",
+      "~/Library/Application Support/Arc/GrShaderCache/*",
+      "~/Library/Application Support/Arc/GraphiteDawnCache/*",
+      "~/Library/Application Support/Arc/Crashpad/completed/*",
+      "~/Library/Application Support/Arc/User Data/*/Code Cache/*",
+      "~/Library/Application Support/Arc/User Data/*/GPUCache/*",
+      "~/Library/Application Support/Arc/User Data/*/DawnCache/*",
+      "~/Library/Application Support/Arc/User Data/*/GrShaderCache/*",
+      "~/Library/Application Support/Arc/User Data/*/GraphiteDawnCache/*",
+      "~/Library/Application Support/Arc/User Data/ShaderCache/*",
+      "~/Library/Application Support/Arc/User Data/GrShaderCache/*",
+      "~/Library/Application Support/Arc/User Data/GraphiteDawnCache/*",
+      "~/Library/Application Support/Arc/User Data/component_crx_cache/*",
+      "~/Library/Application Support/Arc/User Data/extensions_crx_cache/*",
+      "~/Library/Application Support/Arc/User Data/Crashpad/completed/*",
+      "~/Library/Application Support/Arc/*/Service Worker/CacheStorage/*",
+      "~/Library/Application Support/Arc/User Data/*/Service Worker/CacheStorage/*"
+    ],
+    "match": "只有 Arc 未运行才清 Application Support 下的缓存（:2186 三态进程守卫：运行中或进程状态未知即 :2208 报停并整块跳过）；~/Library/Caches/company.thebrowser.Browser/* 在守卫之前，只要 ~/Library/Application Support/Arc 存在（:2183）就删，Arc 在跑也照删；末尾两段 Service Worker/CacheStorage 也在守卫之外，同样只以该目录存在为条件。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:2184-2207",
+    "source": "artifacts/mole-cli/lib/clean/user.sh:2183-2217",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:145 (company.thebrowser.Browser)"
+    "in_app_evidence": "report/p1a-strings.json:145 (company.thebrowser.Browser)",
+    "secondary_source": "artifacts/mole-cli/lib/clean/caches.sh:74-229"
   },
   {
     "id": "browser-11",
     "category": "browser",
-    "paths": ["~/Library/Caches/company.thebrowser.dia/*", "~/Library/Caches/Dia/User Data/*/Cache/* / Code Cache/*", "~/Library/Application Support/Dia/User Data/GraphiteDawnCache|GPUPersistentCache|component_crx_cache|extensions_crx_cache/*", "…/Dia/User Data/*/DawnGraphiteCache|DawnWebGPUCache|GPUCache/*"],
-    "match": null,
+    "paths": [
+      "~/Library/Caches/company.thebrowser.dia/*",
+      "~/Library/Caches/Dia/User Data/*/Cache/*",
+      "~/Library/Caches/Dia/User Data/*/Code Cache/*",
+      "~/Library/Application Support/Dia/User Data/GraphiteDawnCache/*",
+      "~/Library/Application Support/Dia/User Data/GPUPersistentCache/*",
+      "~/Library/Application Support/Dia/User Data/component_crx_cache/*",
+      "~/Library/Application Support/Dia/User Data/extensions_crx_cache/*",
+      "~/Library/Application Support/Dia/User Data/*/DawnGraphiteCache/*",
+      "~/Library/Application Support/Dia/User Data/*/DawnWebGPUCache/*",
+      "~/Library/Application Support/Dia/User Data/*/GPUCache/*",
+      "~/Library/Application Support/Dia/User Data/*/Service Worker/CacheStorage/*"
+    ],
+    "match": "只有 Dia 未运行才清 ~/Library/Application Support/Dia 下的缓存：:2226-2233 用 pgrep -x \"Dia\" 自建三态，仅 state=1（未运行）进 :2234 分支删除，运行中或状态未知（含找不到 pgrep）走 :2244-2249 打 skipped。首条 ~/Library/Caches/company.thebrowser.dia/*（:2223）在 if 之前，Dia 运行时照删。尾部 Service Worker/CacheStorage 段（:2250-2253）也在守卫之外，只以 :2224 的目录存在为条件。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:2223-2243",
+    "source": "artifacts/mole-cli/lib/clean/user.sh:2223-2254",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:59,146 (Dia)"
+    "in_app_evidence": "report/p1a-strings.json:59,146 (Dia)",
+    "secondary_source": "artifacts/mole-cli/lib/clean/caches.sh:74-229"
   },
   {
     "id": "browser-12",
     "category": "browser",
-    "paths": ["~/Library/Application Support/BraveSoftware/Brave-Browser/*/Application Cache|Code Cache|GPUCache|DawnCache|GrShaderCache|GraphiteDawnCache/*", "…/Brave-Browser/component_crx_cache/* / ShaderCache / GrShaderCache / GraphiteDawnCache / Crashpad/completed/*"],
-    "match": "Brave 进程守卫",
+    "paths": [
+      "~/Library/Caches/BraveSoftware/Brave-Browser/*",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser/*/Application Cache/*",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser/*/Code Cache/*",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser/*/GPUCache/*",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser/*/DawnCache/*",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser/*/GrShaderCache/*",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser/*/GraphiteDawnCache/*",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser/component_crx_cache/*",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser/ShaderCache/*",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser/GrShaderCache/*",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser/GraphiteDawnCache/*",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser/Crashpad/completed/*",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser/*/Service Worker/CacheStorage/*"
+    ],
+    "match": "Caches 分支（:2255 BraveSoftware 目录存在为前置）只在 mole_cleanup_targets_exist 命中时经 _user_safe_clean_process_guarded 删 ~/Library/Caches/BraveSoftware/Brave-Browser/*，Brave 运行或进程状态未知即 defer 并报停（:2256-2259、:16-40）。Application Support 下 11 条缓存仅当 mole_clean_process_guard is_brave_browser_running（:791-793 mole_pgrep_any -x \"Brave Browser\"）返回未运行时才清，运行/未知走 :2273-2275 报停。末尾 */Service Worker/CacheStorage 段在守卫之外，只要该 BraveSoftware 目录存在就逐 profile 清理。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:2257-2272",
+    "source": "artifacts/mole-cli/lib/clean/user.sh:2255-2279",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:48-51,91"
+    "in_app_evidence": "report/p1a-strings.json:49 (/Library/Caches/BraveSoftware/Brave-Browser；:48,50-51 父目录与 -Beta/-Nightly，:91 com.brave.Browser)",
+    "secondary_source": "artifacts/mole-cli/lib/clean/caches.sh:74-229"
   },
   {
     "id": "browser-13",
@@ -520,7 +598,11 @@
   {
     "id": "browser-14",
     "category": "browser",
-    "paths": ["~/Library/Caches/Yandex/YandexBrowser/*", "~/Library/Application Support/Yandex/YandexBrowser/ShaderCache|GrShaderCache|GraphiteDawnCache/*", "…/YandexBrowser/*/GPUCache/*"],
+    "paths": [
+      "~/Library/Caches/Yandex/YandexBrowser/*",
+      "~/Library/Application Support/Yandex/YandexBrowser/ShaderCache|GrShaderCache|GraphiteDawnCache/*",
+      "…/YandexBrowser/*/GPUCache/*"
+    ],
     "match": null,
     "default_selected": true,
     "risk": "low",
@@ -529,8 +611,8 @@
     "command": null,
     "protected_by": ["P-01"],
     "source": "artifacts/mole-cli/lib/clean/user.sh:2293-2297",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:141"
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:141（仅同工具其他路径）"
   },
   {
     "id": "browser-15",
@@ -550,17 +632,23 @@
   {
     "id": "browser-16",
     "category": "browser",
-    "paths": ["~/Library/Caches/com.vivaldi.Vivaldi/*", "~/Library/Application Support/Vivaldi/*/Code Cache|GPUCache|DawnCache|GrShaderCache|GraphiteDawnCache/*", "…/Vivaldi/ShaderCache|GrShaderCache|GraphiteDawnCache|Crashpad/completed/*"],
-    "match": "Vivaldi 进程守卫",
+    "paths": [
+      "~/Library/Caches/com.vivaldi.Vivaldi/*",
+      "~/Library/Application Support/Vivaldi/*/Code Cache|GPUCache|DawnCache|GrShaderCache|GraphiteDawnCache/*",
+      "…/Vivaldi/ShaderCache|GrShaderCache|GraphiteDawnCache|Crashpad/completed/*",
+      "~/Library/Application Support/Vivaldi/*/Service Worker/CacheStorage/*"
+    ],
+    "match": "整块以 ~/Library/Application Support/Vivaldi 存在为前提（engine/lib/clean/user.sh:2317）。进程守卫 mole_clean_process_guard _vivaldi_process_state（pgrep -x \"Vivaldi\"，三态：未运行/运行中/未知）只包住 :2321-2329 的 profile 缓存删除，仅未运行时删，运行中或状态未知走 :2330-2331 只记日志。首条 ~/Library/Caches/com.vivaldi.Vivaldi/*（:2318）在守卫之前、尾部 Service Worker/CacheStorage 循环（:2333-2335）在守卫之外，Vivaldi 运行时照删。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:2318-2329",
+    "source": "artifacts/mole-cli/lib/clean/user.sh:2317-2336",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:139"
+    "in_app_evidence": "report/p1a-strings.json:139",
+    "secondary_source": "artifacts/mole-cli/lib/clean/caches.sh:74-229"
   },
   {
     "id": "browser-17",
@@ -580,23 +668,31 @@
   {
     "id": "browser-18",
     "category": "browser",
-    "paths": ["~/Library/Caches/com.tencent.QQBrowser3/*", "~/Library/Application Support/QQBrowser3/*/Code Cache|GPUCache/*", "…/QQBrowser3/ShaderCache|GrShaderCache|GraphiteDawnCache|component_crx_cache|Crashpad/completed/*"],
-    "match": "QQ 浏览器进程守卫",
+    "paths": [
+      "~/Library/Caches/com.tencent.QQBrowser3/*",
+      "~/Library/Application Support/QQBrowser3/*/Code Cache|GPUCache/*",
+      "…/QQBrowser3/ShaderCache|GrShaderCache|GraphiteDawnCache|component_crx_cache|Crashpad/completed/*"
+    ],
+    "match": "整块以 ~/Library/Application Support/QQBrowser3 存在为前提（engine/lib/clean/user.sh:2345），仅有 ~/Library/Caches 时不执行。首条 ~/Library/Caches/com.tencent.QQBrowser3/*（:2346）在进程守卫之前，QQ 浏览器运行时照删。进程守卫 mole_clean_process_guard _qqbrowser_process_state（pgrep -x \"QQBrowser3\"，三态：未运行/运行中/未知）只包住 :2348-2354 的 profile 缓存删除（*/Code Cache、*/GPUCache、ShaderCache、GrShaderCache、GraphiteDawnCache、component_crx_cache、Crashpad/completed），仅未运行时删，运行中或状态未知走 :2355-2356 只记日志。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:2346-2355",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:337 (/Library/Containers/com.wuziqi.SenPlayer 同段浏览器类)"
+    "source": "artifacts/mole-cli/lib/clean/user.sh:2347-2358",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:131-135（/Library/Caches/com.tencent.QQMusicMac|WeWorkMac|live|meeting|qq，仅同厂商其他产品路径）"
   },
   {
     "id": "browser-19",
     "category": "browser",
-    "paths": ["~/Library/Caches/BrowserOS/*/Cache|Code Cache/*", "~/Library/Application Support/BrowserOS/*/GPUCache|DawnGraphiteCache|DawnWebGPUCache/*", "…/BrowserOS/ShaderCache|GrShaderCache|GraphiteDawnCache|GPUPersistentCache|component_crx_cache|Crashpad/completed/*"],
-    "match": null,
+    "paths": [
+      "~/Library/Caches/BrowserOS/*/Cache|Code Cache/*",
+      "~/Library/Application Support/BrowserOS/*/GPUCache|DawnGraphiteCache|DawnWebGPUCache/*",
+      "…/BrowserOS/ShaderCache|GrShaderCache|GraphiteDawnCache|GPUPersistentCache|component_crx_cache|Crashpad/completed/*"
+    ],
+    "match": "整块以 ~/Library/Application Support/BrowserOS 或 ~/Library/Caches/BrowserOS 存在为前提（engine/lib/clean/user.sh:2360）。进程守卫 mole_clean_process_guard _browseros_process_state（pgrep -x \"BrowserOS\"|\"BrowserOS Helper\" 或全命令行匹配 /BrowserOS[.]app/，三态：未运行/运行中/未知；user.sh:827-832、base.sh:2020-2033）包住 :2362-2372 全部 11 条缓存删除，仅未运行时删，运行中或状态未知走 :2373-2374 只记日志。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
@@ -610,15 +706,16 @@
     "id": "browser-20",
     "category": "browser",
     "paths": ["Web 应用 Service Worker / CacheStorage 缓存（PWA 站点缓存，clean_service_worker_cache 判定面）"],
-    "match": "只清 Service Worker CacheStorage 与 HTTP cache 类目录；带进程与句柄判定",
+    "match": "按 profile 遍历 Chrome/Arc/Dia/Brave/Vivaldi 等浏览器传入的 `Service Worker/CacheStorage`，只清 `find -mindepth 2 -maxdepth 2 -type d` 命中的 origin 子目录，不含 HTTP cache 类目录。删除前做符号链接根拒绝、`PROTECTED_SW_DOMAINS`/白名单跳过与路径身份快照复校；仅 Feishu/Notion/dev 传入 `delete_guard` 进程守卫，浏览器调用只传前两参、无进程或句柄判定。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01", "P-10"],
-    "source": "artifacts/mole-cli/lib/clean/caches.sh:74-231",
-    "in_app": "unknown"
+    "source": "artifacts/mole-cli/lib/clean/caches.sh:74-229",
+    "in_app": "unknown",
+    "secondary_source": "artifacts/mole-cli/lib/clean/user.sh:2175-2176"
   },
   {
     "id": "dev_tools-01",
@@ -667,22 +764,28 @@
   {
     "id": "dev_tools-04",
     "category": "dev_tools",
-    "paths": ["Rust 依赖/构建缓存根（clean_rust_dependency_cache_root 判定面：~/.cargo/registry/cache、~/.cargo/git 等）"],
-    "match": "rust_cache_root_physical_path + 进程守卫（rust_build_process_state）+ 保留工具链（check_rust_toolchains）",
+    "paths": ["~/.cargo/registry/cache/*", "~/.rustup/downloads/*"],
+    "match": "CARGO_HOME 由 resolve_tool_home 解析（绝对路径且不含 .. 或控制字符才采用，否则回落到 ~/.cargo；RUSTUP_HOME 同理由 mise 等版本管理器重定位，dev.sh:1421-1422、1298-1313）。只有 ${cargo_home}/registry/cache 下存在未被保护/白名单命中的目标时才进入 Rust 分支（dev.sh:1424-1425、base.sh:2161-2175）：rust_build_process_state（pgrep -x cargo/rustc/rustdoc/clippy-driver/cargo-nextest，dev.sh:1317-1324）返回运行中则整族延后清理（:1428-1429），未知则报停并跳过（:1435-1438）。仅进程空闲时经 clean_rust_dependency_cache_root 先 cd -P 物理化并要求 registry/cache 落在 CARGO_HOME 之内（:1329-1345），再由 _dev_safe_clean_process_guarded（base.sh:2097-2123：:2106 把 _dev_final_process_delete_guard_allows 挂成 safe_remove 终审钩子，:2118 交给 safe_clean_guarded）在终审处复检「进程空闲 + 物理根身份未变」（rust_cache_cleanup_state，dev.sh:1349-1379），全部通过才删 registry/cache/*。末尾 ${rustup_home}/downloads/* 由裸 safe_clean 收取，无进程与路径守卫（:1440）。bin、toolchains、registry/src、registry/index 与 ~/.cargo/git 属保留项，Rust 工具链只由 check_rust_toolchains（:1501-1521）经 check_multiple_versions→mole_review_row 上报，不删。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:1317-1442",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:237 (cargo 命令字符串)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:1317-1441",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:614（仅 cargo 裸命令名，非 /Library 路径）"
   },
   {
     "id": "dev_tools-05",
     "category": "dev_tools",
-    "paths": ["~/.rbenv/cache/*", "~/.gem/specs/*", "~/.gem/ruby/*/cache/*.gem", "~/.bundle/cache/*", "~/.cpan/build/*"],
+    "paths": [
+      "~/.rbenv/cache/*",
+      "~/.gem/specs/*",
+      "~/.gem/ruby/*/cache/*.gem",
+      "~/.bundle/cache/*",
+      "~/.cpan/build/*"
+    ],
     "match": "CPAN：~/.cpan/sources 是安装源与分发存储，明确不清",
     "default_selected": true,
     "risk": "low",
@@ -690,24 +793,28 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:1443-1458",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:240 (ruby/gem 命令字符串)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:1443-1454",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:652（仅 ruby 裸命令名，非 /Library 路径）"
   },
   {
     "id": "dev_tools-06",
     "category": "dev_tools",
-    "paths": ["Docker 未使用数据（docker system prune 类操作，clean_docker_unused_data）", "~/Library/Containers/com.docker.docker/Data 白名单判定", "~/Library/Group Containers/*dev.orbstack/data"],
-    "match": "docker 进程与 daemon 判定；OrbStack 运行路径保护（P-07）；白名单命中即跳过",
+    "paths": [
+      "Docker build cache 与 dangling images（docker builder prune -f --filter until=168h / docker image prune -f；容器、卷、网络与 tagged images 永不触碰）",
+      "~/Library/Containers/com.docker.docker/Data（白名单命中即整段跳过）",
+      "~/Library/Group Containers/*dev.orbstack/data（仅统计体积出建议行，不删除）"
+    ],
+    "match": "仅在 Docker endpoint 为本地（dev.sh:1569）、白名单 ~/Library/Containers/com.docker.docker/Data 未命中（:1579）、且 docker info 探活成功（:1592）时继续，否则整段跳过、从不启动 Docker Desktop；不做 docker 进程判定——引擎自身串行化 prune 并保留在用缓存记录（:1560-1561）。只跑 docker builder prune -f --filter until=168h（BUILDX_BUILDER 固定为本地 context 名，:1634）与 docker image prune -f（:1636），容器、卷、网络与 tagged images 永不触碰（:1556-1558）；OrbStack 数据只 get_path_size_kb 出建议行、留给手动 prune，从不进删除路径（:1676-1690）。",
     "default_selected": true,
-    "risk": "high",
+    "risk": "medium",
     "needs_admin": false,
     "action": "command",
     "command": "docker <prune 子命令>（具体子命令见 dev.sh:1536-1671；解析 _docker_prune_reclaimed_bytes 统计回收量）",
     "protected_by": ["P-07", "N-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:1523-1698",
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:1523-1693",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:98-99 (/Library/Caches/com.docker.*), :152 (/Library/Caches/io.orbstack), :579 (containers/com.docker.docker)"
+    "in_app_evidence": "report/p1a-strings.json:579 (~/Library/Containers/com.docker.docker)"
   },
   {
     "id": "dev_tools-07",
@@ -740,8 +847,20 @@
   {
     "id": "dev_tools-09",
     "category": "dev_tools",
-    "paths": ["~/.cache/typescript/*", "~/.cache/electron/*", "~/.cache/node-gyp/*", "~/.node-gyp/*", "~/.turbo/cache/*", "~/.vite/cache/*", "~/.cache/vite/*", "~/.cache/webpack/*", "~/.parcel-cache/*", "~/.cache/eslint/*", "~/.cache/prettier/*"],
-    "match": "前端工具链缓存；注释明确排除需要重新下载或重编译的根（如 ~/.m2/repository、~/.yarn/berry/cache 另行保护）",
+    "paths": [
+      "~/.cache/typescript/*",
+      "~/.cache/electron/*",
+      "~/.cache/node-gyp/*",
+      "~/.node-gyp/*",
+      "~/.turbo/cache/*",
+      "~/.vite/cache/*",
+      "~/.cache/vite/*",
+      "~/.cache/webpack/*",
+      "~/.parcel-cache/*",
+      "~/.cache/eslint/*",
+      "~/.cache/prettier/*"
+    ],
+    "match": "前端工具链构建缓存，逐条 safe_clean 清理，无进程/版本附加判定，删除前仅经 should_protect_path（P-01）与用户白名单闸门。~/.yarn/berry/cache 由 P-01 名单（app_protection.sh:416）保护，不在本条 paths 内；~/.m2/repository 等保留项属 JVM 段（dev.sh:3277-3282），与本段无关。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
@@ -749,8 +868,8 @@
     "command": null,
     "protected_by": ["P-01"],
     "source": "artifacts/mole-cli/lib/clean/dev.sh:1713-1726",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:151 (/Library/Caches/electron)"
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:151 (/Library/Caches/electron)（仅同工具其他路径）"
   },
   {
     "id": "dev_tools-10",
@@ -763,15 +882,35 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:3508-3521",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:64 (/Library/Caches/JetBrains)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:3508-3510",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:173 (~/Library/Caches/JetBrains)（仅同工具其他路径）"
   },
   {
     "id": "dev_tools-11",
     "category": "dev_tools",
-    "paths": ["~/.composer/cache/*", "~/Library/Caches/composer/*", "~/.cache/bazel/*", "~/.cache/zig/*", "~/.cache/terraform/*", "~/.grafana/cache/*", "~/.jenkins/workspace/*/target/*", "~/.cache/gitlab-runner/*", "~/.github/cache/*", "~/.circleci/cache/*", "~/.sonar/*", "~/.cache/curl/*", "~/.cache/wget/*", "~/Library/Caches/curl/*", "~/Library/Caches/wget/*", "~/.hex/cache/*", "~/.opam/download-cache/*", "~/.oh-my-zsh/cache/*", "~/.cache/pre-commit/*"],
-    "match": "含 CI/CD、数据库 CLI、网络工具、Elixir/OCaml、Shell 缓存；Deno 根排除；Prometheus WAL 不删；Haskell 无清理阶段（~/.stack/programs 与 ~/.cabal/packages 保留）；~/.mix/archives 保留",
+    "paths": [
+      "~/.composer/cache/*",
+      "~/Library/Caches/composer/*",
+      "~/.cache/bazel/*",
+      "~/.cache/zig/*",
+      "~/.cache/terraform/*",
+      "~/.grafana/cache/*",
+      "~/.jenkins/workspace/*/target/*",
+      "~/.cache/gitlab-runner/*",
+      "~/.github/cache/*",
+      "~/.circleci/cache/*",
+      "~/.sonar/*",
+      "~/.cache/curl/*",
+      "~/.cache/wget/*",
+      "~/Library/Caches/curl/*",
+      "~/Library/Caches/wget/*",
+      "~/.hex/cache/*",
+      "~/.opam/download-cache/*",
+      "~/.oh-my-zsh/cache/*",
+      "~/.cache/pre-commit/*"
+    ],
+    "match": "含 CI/CD、网络工具、Elixir/OCaml、Shell、Bazel/Zig 等语言工具缓存（不含数据库 CLI，数据库/API 客户端缓存归 dev_tools-30）；Deno 根排除；Prometheus WAL 不删；Haskell 无清理阶段（~/.stack/programs 与 ~/.cabal/packages 保留）；~/.mix/archives 保留",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
@@ -780,12 +919,26 @@
     "protected_by": ["P-01", "OP-13"],
     "source": "artifacts/mole-cli/lib/clean/dev.sh:4408-4435,6220-6245",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:68 (/Library/Caches/Prisma), :147 (composer)"
+    "in_app_evidence": "report/p1a-strings.json:147 (/Library/Caches/composer)"
   },
   {
     "id": "dev_tools-12",
     "category": "dev_tools",
-    "paths": ["Android/Expo/SwiftPM/移动端缓存（clean_dev_mobile 判定面：~/.android/build-cache、~/.android/cache、~/.cache/swift-package-manager、~/Library/Caches/org.swift.swiftpm、~/.expo/*、~/Library/Caches/Google/AndroidStudio*、~/Library/Developer/Xcode/UserData/IB Support/*）"],
+    "paths": [
+      "~/Library/Caches/Google/AndroidStudio*/*",
+      "~/.android/build-cache/*",
+      "~/.android/cache/*",
+      "~/Library/Developer/Xcode/UserData/IB Support/*",
+      "~/.cache/swift-package-manager/*",
+      "~/Library/Caches/org.swift.swiftpm/*",
+      "~/.expo/expo-go/*",
+      "~/.expo/android-apk-cache/*",
+      "~/.expo/ios-simulator-app-cache/*",
+      "~/.expo/native-modules-cache/*",
+      "~/.expo/schema-cache/*",
+      "~/.expo/template-cache/*",
+      "~/.expo/versions-cache/*"
+    ],
     "match": "该步以 --strict 运行（失败即中断）；CocoaPods 与 Flutter 缓存被显式注释掉（保留）",
     "default_selected": true,
     "risk": "medium",
@@ -793,9 +946,9 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:2994-3275（路径行 3253-3272）",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:344 (/Library/Developer/Xcode/DerivedData), :53 (/Library/Caches/CocoaPods 在 App 侧出现)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:2994-3273",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:344 (/Library/Developer/Xcode/DerivedData)（仅同工具其他路径；:54 的 /Library/Caches/CocoaPods 对应 dev.sh:3254 已注释掉的路径）"
   },
   {
     "id": "dev_tools-13",
@@ -815,17 +968,17 @@
   {
     "id": "dev_tools-14",
     "category": "dev_tools",
-    "paths": ["~/Library/Application Support/JetBrains/Toolbox/apps 下旧版本（clean_dev_jetbrains_toolbox）"],
-    "match": "保留活动版本（版本比对）",
+    "paths": ["~/Library/Application Support/JetBrains/Toolbox/apps/*/ch-*/[0-9]*"],
+    "match": "保留 current 符号链接指向的活动版本（current 为目录时同样保留）；其余数字开头的版本目录按 mtime 从新到旧排序，保留最近修改的 MOLE_JETBRAINS_TOOLBOX_KEEP 个（默认 1），更旧的永久删除。只扫各产品目录下的 ch-* 通道，current、点目录及 plugins/plugins-lib/plugins-libs 跳过。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:3401-3507",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:175 (~/Library/Caches/com.jetbrains.toolbox)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:3401-3504",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:175 (~/Library/Caches/com.jetbrains.toolbox，仅同工具其他路径)"
   },
   {
     "id": "dev_tools-15",
@@ -869,18 +1022,23 @@
     "command": null,
     "protected_by": ["P-01"],
     "source": "artifacts/mole-cli/lib/clean/dev.sh:6199-6205",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:96 (/Library/Caches/com.cursor.Cursor), :148 (cursor-compile-cache)"
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:416 (/bin/cursor-agent，仅同工具其他路径；:96 /Library/Caches/com.cursor.Cursor 为 Cursor 编辑器缓存，亦非同路径)"
   },
   {
     "id": "dev_tools-18",
     "category": "dev_tools",
-    "paths": ["~/Library/Caches/ms-playwright", "~/Library/Caches/camoufox", "~/Library/Caches/Cypress", "~/.cache/puppeteer"],
+    "paths": [
+      "~/Library/Caches/ms-playwright",
+      "~/Library/Caches/camoufox",
+      "~/Library/Caches/Cypress",
+      "~/.cache/puppeteer"
+    ],
     "match": "永不删除（N-12）；本行只作为“被保护”登记，对应 dev.sh 的显式注释",
     "default_selected": false,
     "risk": "low",
     "needs_admin": false,
-    "action": "delete",
+    "action": "protect",
     "command": null,
     "protected_by": ["N-12"],
     "source": "artifacts/mole-cli/lib/clean/dev.sh:6207-6210",
@@ -891,14 +1049,14 @@
     "id": "dev_tools-19",
     "category": "dev_tools",
     "paths": ["${COREPACK_HOME:-~/.cache/node/corepack}"],
-    "match": "根路径安全校验 owner_cache_root_is_safe（拒绝 /、$HOME、$HOME/Library 等过宽根）",
+    "match": "先要求路径为绝对路径，再用内联 case 拒绝 /、$HOME、$HOME/、$HOME/Library（含尾斜杠）这几类过宽根；通过后若 corepack 可用则经 clean_tool_cache（其内再用 owner_cache_root_is_safe 做物理路径与白名单校验）执行 corepack cache clean，否则 safe_clean 删除根下 * 内容，根目录本身保留",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:161-182",
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:161-181",
     "in_app": "unknown"
   },
   {
@@ -918,7 +1076,7 @@
   {
     "id": "dev_tools-21",
     "category": "dev_tools",
-    "paths": ["GitHub CLI 缓存（clean_github_cli_cache 判定根）"],
+    "paths": ["${XDG_CACHE_HOME:-~/.cache}/gh"],
     "match": "gh 进程未运行（github_cli_process_state）+ 有界清理",
     "default_selected": true,
     "risk": "low",
@@ -974,22 +1132,29 @@
   {
     "id": "dev_tools-25",
     "category": "dev_tools",
-    "paths": ["~/.npm（npm_default_cache）", "受守卫的 dev cache 根（guarded_dev_cache_root，含 _cacache/_logs 等）"],
-    "match": "npm 进程守卫（guarded_dev_cache_cleanup_state）+ 物理路径校验（guarded_dev_cache_root_physical_path）",
+    "paths": [
+      "~/.npm/_cacache/*",
+      "~/.npm/_logs/*",
+      "~/.npm/_prebuilds/*",
+      "npm 配置的缓存根（npm config get cache，经 npm cache clean --force 清理）"
+    ],
+    "match": "npm 可用且 npm config get cache 返回绝对路径（rc=0、不含换行）时，经 clean_tool_cache 对该配置根执行 npm cache clean --force；否则回落到默认 ~/.npm。随后对 ~/.npm（以及不同于默认的自定义根）的 _cacache/_logs/_prebuilds 子项逐个 safe_clean。保留 _npx，全函数没有任何 npm 进程守卫。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:663-727,728-873",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:639 (npm 命令字符串)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:663-724",
+    "in_app": "unknown"
   },
   {
     "id": "dev_tools-26",
     "category": "dev_tools",
-    "paths": ["PyInstaller 构建缓存（clean_pyinstaller_bincache 判定面）", "Python __pycache__ / 编译缓存（clang 模块缓存，clean_clang_module_cache）"],
+    "paths": [
+      "~/Library/Application Support/pyinstaller/bincache*（clean_pyinstaller_bincache：仅容器下顶层、非符号链接的 bincache* 子项）",
+      "$(mole_darwin_user_cache_root)/clang/*（clean_clang_module_cache：clang 根下全部一级项含点文件，不含任何 __pycache__ 逻辑）"
+    ],
     "match": "pyinstaller_build_process_state / clang_module_cache_process_state 守卫",
     "default_selected": true,
     "risk": "low",
@@ -1003,31 +1168,32 @@
   {
     "id": "dev_tools-27",
     "category": "dev_tools",
-    "paths": ["mise 缓存（get_mise_cache_path → ~/Library/Caches/mise；resolve_tool_home 判定面）"],
-    "match": "仅 Caches 下的 mise 根；工具 home 解析失败即跳过",
+    "paths": ["~/Library/Caches/mise", "MISE_CACHE_DIR 或 `mise cache path` 解析出的 mise 缓存根（绝对路径，可不在 Caches 下）"],
+    "match": "优先取绝对路径的 MISE_CACHE_DIR，否则 mise 可用时取 `mise cache path` 的绝对路径输出（rc≠0 或非绝对/含换行即 return 1），两者皆无才回落到 ~/Library/Caches/mise；解析失败即跳过该条（dev.sh:1272-1274）。有 mise 时经 clean_tool_cache 执行 `mise cache clear`（白名单或不安全根则跳过，DRY_RUN 只打印不删），无 mise 时 safe_clean 删除该缓存根下全部一级项、根自身保留。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:1252-1316",
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:1252-1292",
     "in_app": "unknown"
   },
   {
     "id": "dev_tools-28",
     "category": "dev_tools",
-    "paths": ["OrbStack data 目录（~/Library/Group Containers/*dev.orbstack/data）"],
-    "match": "仅当可定位且非活动运行镜像时；OrbStack 运行路径整体受 P-07 保护",
+    "paths": ["~/Library/Group Containers/*dev.orbstack/data"],
+    "match": "只提示不删除：find_orbstack_data_dir 取首个存在的 ~/Library/Group Containers/*dev.orbstack/data（dev.sh:1525 的 glob 配 :1526 的 -d 判定，命中即 printf 后 return 0，其余候选不再看），clean_dev_docker 再用 get_path_size_kb 算体积，仅当 rc=0 且输出为纯数字且 >0 时打印 ICON_REVIEW 建议行并记 debug 日志「left for manual prune」（:1686-1689）。体积探测失败即不出行，rc>=128 的信号才中止本次清理（:1682-1685）；全程无 safe_clean/rm/safe_remove，P-07 的 is_orbstack_runtime_path 因本条不删而不构成门控。",
     "default_selected": true,
-    "risk": "high",
+    "risk": "low",
     "needs_admin": false,
-    "action": "delete",
+    "action": "report",
     "command": null,
     "protected_by": ["P-07", "N-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:1523-1535",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:152 (/Library/Caches/io.orbstack)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:1523-1531",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:152 (/Library/Caches/io.orbstack)（仅同工具其他路径：io.orbstack vs dev.orbstack，Caches 与 Group Containers/*/data 均不同）",
+    "secondary_source": "artifacts/mole-cli/lib/clean/dev.sh:1675-1691"
   },
   {
     "id": "dev_tools-29",
@@ -1046,7 +1212,20 @@
   {
     "id": "dev_tools-30",
     "category": "dev_tools",
-    "paths": ["~/Library/Caches/com.sequel-ace.sequel-ace/*", "~/Library/Caches/com.eggerapps.Sequel-Pro/*", "~/Library/Caches/redis-desktop-manager/*", "~/Library/Caches/com.navicat.*", "~/Library/Caches/com.dbeaver.*", "~/Library/Caches/com.redis.RedisInsight", "~/Library/Caches/com.postmanlabs.mac/*", "~/Library/Caches/com.konghq.insomnia/*", "~/Library/Caches/com.tinyapp.TablePlus/*", "~/Library/Caches/com.getpaw.Paw/*", "~/Library/Caches/com.charlesproxy.charles/*", "~/Library/Caches/com.proxyman.NSProxy/*"],
+    "paths": [
+      "~/Library/Caches/com.sequel-ace.sequel-ace/*",
+      "~/Library/Caches/com.eggerapps.Sequel-Pro/*",
+      "~/Library/Caches/redis-desktop-manager/*",
+      "~/Library/Caches/com.navicat.*",
+      "~/Library/Caches/com.dbeaver.*",
+      "~/Library/Caches/com.redis.RedisInsight",
+      "~/Library/Caches/com.postmanlabs.mac/*",
+      "~/Library/Caches/com.konghq.insomnia/*",
+      "~/Library/Caches/com.tinyapp.TablePlus/*",
+      "~/Library/Caches/com.getpaw.Paw/*",
+      "~/Library/Caches/com.charlesproxy.charles/*",
+      "~/Library/Caches/com.proxyman.NSProxy/*"
+    ],
     "match": "数据库客户端与 API/调试工具缓存（无进程守卫）",
     "default_selected": true,
     "risk": "low",
@@ -1054,39 +1233,41 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:4437-4454",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:481 (jetbrains.ws), :479 (sqlitebrowser)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:4437-4453",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:340 (/Library/DBeaverData)（仅同工具其他路径）"
   },
   {
     "id": "ai_tools-01",
     "category": "ai_tools",
     "paths": ["~/.local/share/claude/versions/*"],
-    "match": "保留最近 MOLE_AI_AGENTS_KEEP（默认 1）个旧版本；活动版本由符号链接 ~/.local/bin/claude 解析，解析失败或链接断裂即整族保留；plan 阶段超时/未知即保留（mole_rc_timeout → in_ventory unknown）",
+    "match": "只处理 ~/.local/share/claude/versions 下名字不以 . 开头且以数字开头的版本子项，按 mtime 保留最新的 MOLE_AI_AGENTS_KEEP（默认 1，非数字回落 1）个；活动版本仅当符号链接 ~/.local/bin/claude 存在（-L）时才解析（dev.sh:4379、:4360-4361），该链接根本不存在时整段跳过、active_path 为空，仍保留最新 N 个并删其余（:3853-3854、:3638-3652）。链接存在但断裂或解析不到 versions 根内条目时整族保留（:4382-4397）；plan 超时/未知（inventory unknown）同样整族保留（:3840-3848、:3761-3764）。删除前守卫重解析活动路径并重排目标，目标须仍在计划清单内，lsof 显示有进程持有（rc=0）或无法判定（rc>2 且非超时）时只保留该版本、其余照删（:3809-3821）。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01", "P-04"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:4359-4405（specs 4363-4367 / guard 3727-3823 / plan 3558-3653）",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:587 (.claude)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:4359-4405",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:587 (.claude)（仅同工具其他路径）",
+    "secondary_source": "artifacts/mole-cli/lib/clean/dev.sh:3727-3822"
   },
   {
     "id": "ai_tools-02",
     "category": "ai_tools",
     "paths": ["~/.local/share/cursor-agent/versions/*"],
-    "match": "同上：保留活动版本（~/.local/bin/cursor-agent 符号链接解析）",
+    "match": "只处理 ~/.local/share/cursor-agent/versions 下名字不以 . 开头且以数字开头的第一层版本子项，根目录保留，按 mtime 保留最新的 MOLE_AI_AGENTS_KEEP（默认 1，非数字回落 1）个（dev.sh:4365、:4360-4361、:3590-3594、:3636-3652）。活动版本仅当符号链接 ~/.local/bin/cursor-agent 存在（-L）时才解析（:4379、:4381）；该链接根本不存在时整段跳过、active_path 为空，仍保留最新 N 个并删其余（:3853-3854、:3638-3652），链接存在但断裂或解析不到 versions 根内条目时整族保留（:4382-4397）。删除前守卫重解析活动路径并重排目标，目标须仍在计划清单内，删除前只有探测确认无进程持有（file_ops.sh:828 返回 1）才删，探测返回 0（有进程持有）或 2（状态未知）时只保留该版本、其余照删，超时/信号按取消传播（:3809-3821）；plan 超时/未知（inventory unknown）整族保留（:3840-3848、:3761-3764）。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01", "P-04"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:4365",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:594 (.cursor)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:4359-4405",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:416 (/bin/cursor-agent)（仅同工具其他路径）",
+    "secondary_source": "artifacts/mole-cli/lib/clean/dev.sh:3727-3822"
   },
   {
     "id": "ai_tools-03",
@@ -1106,17 +1287,21 @@
   {
     "id": "ai_tools-04",
     "category": "ai_tools",
-    "paths": ["~/Library/Application Support/Claude/claude-code/*", "~/Library/Application Support/Claude/claude-code-vm/*"],
-    "match": "仅当存在多个版本时；活动 SDK 版本必须可判定（claude_desktop_sdk_version_is_safe），Claude Desktop 运行中或版本未知即整族跳过；删除守卫 _deny_versioned_agent_delete",
+    "paths": [
+      "~/Library/Application Support/Claude/claude-code/*",
+      "~/Library/Application Support/Claude/claude-code-vm/*"
+    ],
+    "match": "仅当 claude-code 或 claude-code-vm 下存在多于 1 个数字开头的版本子项时才进入（dev.sh:4086-4103）；活动 SDK 版本取自 claude-code-vm/.sdk-version 首行且须以数字开头、不含 / 与 ..（:3939-3949），未知则整族保留（:4109-4112），且该版本条目必须在每个存在的 root 下真实存在且非符号链接，否则同样整族保留（:4114-4124）。按 mtime 保留最新 MOLE_AI_AGENTS_KEEP（默认 1，非数字回落 1）个旧版（:4360-4361、:3636-3652）；Claude Desktop 运行中则延后、进程态未知则跳过整族（:4176-4186），每个目标删除前 _claude_desktop_delete_guard_allows 复检进程、SDK 与重排后的计划清单（:3959-4024）；无任何可删目标时只做记账，用恒返 1 的 _deny_versioned_agent_delete 防止策略竞态把记账变成删除（:4070-4072、:4154-4173）。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01", "OP-11"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:3922-4237（清法 4074-4237，specs 4081-4084）",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:587 (.claude) / :398 (/Applications/Claude.app)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:4074-4217",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:398 (/Applications/Claude.app)、:78 (/Library/Caches/com.anthropic.claudefordesktop)（仅同工具其他路径）",
+    "secondary_source": "artifacts/mole-cli/lib/clean/dev.sh:3922-4072"
   },
   {
     "id": "ai_tools-05",
@@ -1144,44 +1329,47 @@
     "id": "ai_tools-06",
     "category": "ai_tools",
     "paths": ["~/Library/Caches/com.openai.codex/org.sparkle-project.Sparkle/Installation/*"],
-    "match": "Sparkle 升级 staging；必须证明条目仍陈旧（_codex_staging_entry_is_still_stale）+ 安装版本比对（build version）+ Sparkle 更新器未运行 + 无打开文件",
+    "match": "Sparkle 升级 staging：只扫描 Installation 下的一级子目录（find -P -mindepth 1 -maxdepth 1 -type d，:4914），根与每个条目都须通过物理路径闸（:4874、:4892）。条目须先证明仍陈旧（_codex_staging_entry_is_still_stale：仅直子项、拒符号链接、age 模式走 -mtime +MOLE_ORPHAN_AGE_DAYS，:4687-4730），并与安装版本比对（build version 三件套：bundle id com.openai.codex + 十进制门，安装侧两固定路径 + mdfind，多版本不一致即失败，:4792-4869）；路径命中白名单则整段跳过（:4917），Codex 运行中延后、进程态未知跳过（:4928-4937），Sparkle 更新器运行中延后、状态未知跳过（:4577-4581、:4940），有打开文件或 lsof 不可判（rc2）则跳过（:4583-4629、:4952）。每个条目删除前经 _codex_staging_delete_guard_allows 二次复检进程、更新器、打开文件与陈旧性（:4732-4763）。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:4577-5008",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:359 (/Library/HTTPStorages/com.openai.chat 同族 OpenAICodex 路径)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:4871-4990",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:591 (.codex)（仅同工具其他路径）",
+    "secondary_source": "artifacts/mole-cli/lib/clean/dev.sh:4577-4763"
   },
   {
     "id": "ai_tools-07",
     "category": "ai_tools",
-    "paths": ["~/.codex/packages/app-server-daemon/*"],
-    "match": "release 名合法性（_codex_daemon_release_name_ok）+ 打开状态（_codex_daemon_release_open_state）+ 锁（_codex_daemon_lock_acquire）+ 保留最新（_codex_daemon_resolve_keep）",
+    "paths": ["~/.codex/packages/app-server-daemon/releases/*"],
+    "match": "仅当 ~/.codex/packages/app-server-daemon/releases 下合法命名的 release 目录多于 1 个、路径未命中白名单、且不存在 install.lock.d（install.lock 须存在）时才继续（dev.sh:5170-5171、:5186、:5188、:5200-5205）。扫描只取 releases 下的一级目录（find -P -mindepth 1 -maxdepth 1 -type d，:5147），名字须匹配 <version>-<target> 或 local-<digest>-<target>（:5009），整个过程持有 install.lock 的 POSIX 非阻塞锁（:5047-5062）；保留集不是 mtime 最新的版本，而是 current 符号链接指向的 release 加 auto-update-version marker 里的版本，两者缺失、悬空或指向 releases 之外即整段跳过（:5016-5040）。有进程打开文件（rc=0）或 lsof 无法判定（rc=2，无完整 sudo 视图）的 release 一律保留并在预览提示（:5070-5077、:5141-5153），每个候选项删除前再经 guard 复检 keep 集、物理路径、打开状态与路径身份，current 失效则整段放弃（:5082-5116）。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:5009-5230",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:589 (.codex)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:5009-5218",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:591 (.codex)（仅同工具其他路径）"
   },
   {
     "id": "ai_tools-08",
     "category": "ai_tools",
-    "paths": ["~/Library/Application Support/Codex/Crashpad/pending?**（仅 pending 的直接子项）"],
-    "match": "只清 pending 直接子项；带年龄、进程（codex_crashpad_handler_process_state）、handler 与打开文件闸门；更深一层受 N-07 保护",
+    "paths": [
+      "~/Library/Application Support/Codex/Crashpad/pending/*（仅直子普通文件 -type f 且 -mtime +MOLE_ORPHAN_AGE_DAYS；子目录与符号链接不删）"
+    ],
+    "match": "只清 pending 队列的直接子项，且仅限普通文件并超过 MOLE_ORPHAN_AGE_DAYS 的陈旧报告（dev.sh:5254-5255、:5348-5349）；pending 根先过物理路径闸（:5245），每条路径在删除前重新校验仍是直子项且非符号链接（:5313-5315），每 1000 条复检一次（:5317-5319）。Codex 桌面进程运行（:5260）或 Crashpad handler 运行（:5271-5280）即整族延后，二者状态不可判（rc=2）、打开文件检查命中或不可用（:5287-5300）则跳过。pending 自身、Crashpad 兄弟目录与更深一层受 N-07 保护（app_protection.sh:545-548）。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["N-07"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:5231-5362",
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:5231-5361",
     "in_app": "unknown",
     "in_app_evidence": "App 字符串未见 Crashpad 路径；Protection 侧有 app_protection.sh:536-548 对应保护"
   },
@@ -1202,37 +1390,45 @@
   {
     "id": "ai_tools-10",
     "category": "ai_tools",
-    "paths": ["~/.codex", "~/.codex/*（含 sessions、auth.json、history.jsonl、state_*.sqlite、logs_*.sqlite、session_index.jsonl、cache/codex_app_directory）"],
+    "paths": [
+      "~/.codex",
+      "~/.codex/*（含 sessions、auth.json、history.jsonl、state_*.sqlite、logs_*.sqlite、session_index.jsonl、cache/codex_app_directory）"
+    ],
     "match": "永不默认清理：函数只写 debug 日志，不产生任何删除动作",
     "default_selected": false,
-    "risk": "high",
+    "risk": "low",
     "needs_admin": false,
-    "action": "delete",
+    "action": "protect",
     "command": null,
     "protected_by": ["N-06", "OP-11"],
     "source": "artifacts/mole-cli/lib/clean/dev.sh:5538-5545",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:589 (.codex)"
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:591 (.codex)（仅同工具其他路径）"
   },
   {
     "id": "ai_tools-11",
     "category": "ai_tools",
-    "paths": ["~/.codex/.tmp/*"],
-    "match": "Codex CLI marketplace staging；只清“确认仍陈旧”的残留条目（_codex_marketplace_staging_entry_is_still_stale + 物理路径闸门），已完成 marketplace 保留；白名单命中即跳过",
+    "paths": ["~/.codex/.tmp/bundled-marketplaces/*", "~/.codex/.tmp/marketplaces/.staging/*"],
+    "match": "扫描面不是整个 ~/.codex/.tmp，而是其下两个固定根 bundled-marketplaces 与 marketplaces/.staging（dev.sh:5627-5630），各根须为真实目录且物理路径校验通过，再取一级子目录（find -P -mindepth 1 -maxdepth 1 -type d，:5640-5645、:5670）；条目 basename 须以 openai-bundled.staging-、marketplace-upgrade-、marketplace-add- 三前缀之一开头（:5631-5635、:5646-5658），且 mtime 超过 MOLE_ORPHAN_AGE_DAYS（:5665-5669）才成为候选，未命中前缀的已完成 marketplace 与 marketplace-backup-* 永不入列（:5619-5622）。~/.codex/.tmp 或 ~/.codex 命中白名单时整段跳过，单个条目命中白名单也跳过（:5674-5682、:5705）；codex_runtime_process_state 返回运行中则 deferred、返回未知则跳过（:5684-5694），每个根各做一次 lsof 打开文件探测，有进程持有即 deferred，超时/信号或不可判定（rc=2）即跳过（:5712-5729）。删除逐条经 guard 复检：条目仍陈旧、物理路径前后一致、无打开文件才放行，删除前发生变化只跳过该条（:5549-5568、:5574-5600、:5731-5734）。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01", "P-04", "OP-14"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:5547-5751",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:589 (.codex)"
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:5619-5749",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:591 (.codex)（仅同工具其他路径）"
   },
   {
     "id": "ai_tools-12",
     "category": "ai_tools",
-    "paths": ["~/Library/Caches/com.openai.chat/*", "~/Library/Caches/com.anthropic.claudefordesktop/*", "~/Library/Logs/Claude/*", "~/Library/Caches/com.lmstudio.lmstudio/*"],
+    "paths": [
+      "~/Library/Caches/com.openai.chat/*",
+      "~/Library/Caches/com.anthropic.claudefordesktop/*",
+      "~/Library/Logs/Claude/*",
+      "~/Library/Caches/com.lmstudio.lmstudio/*"
+    ],
     "match": "AI 助手桌面端缓存与日志；Codex 的 Application Support 状态在此函数中明确保留（只 debug_log）；LM Studio 的 ~/.cache/lm-studio 旧根永不递归清理",
     "default_selected": true,
     "risk": "low",
@@ -1242,7 +1438,7 @@
     "protected_by": ["P-01", "OP-12", "N-06"],
     "source": "artifacts/mole-cli/lib/clean/app_caches.sh:1151-1164",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:52 (/Library/Caches/ChatGPTHelper), :78 (com.anthropic.claudefordesktop), :111 (com.lmstudio.lmstudio)"
+    "in_app_evidence": "report/p1a-strings.json:121 (/Library/Caches/com.openai.chat), :78 (com.anthropic.claudefordesktop), :111 (com.lmstudio.lmstudio)；Logs/Claude 无对应 p1a 条目（最接近 :398 /Applications/Claude.app，仅同工具其他路径）"
   },
   {
     "id": "ai_tools-13",
@@ -1266,13 +1462,18 @@
     "command": null,
     "protected_by": ["P-01"],
     "source": "artifacts/mole-cli/lib/clean/dev.sh:5784-5830",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:596 (.gemini)"
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:596 (.gemini)（仅同工具其他路径）"
   },
   {
     "id": "ai_tools-14",
     "category": "ai_tools",
-    "paths": ["~/Library/Application Support/T3 Code*/…缓存子目录（clean_t3code_desktop_caches 判定面）"],
+    "paths": [
+      "~/Library/Application Support/t3code-v2/Partitions/t3code-preview-*/Cache/*",
+      "~/Library/Application Support/t3code-v2/Partitions/t3code-preview-*/Code Cache/*",
+      "~/Library/Application Support/T3 Code (Alpha)/Partitions/t3code-preview-*/Cache/*",
+      "~/Library/Application Support/T3 Code (Alpha)/Partitions/t3code-preview-*/Code Cache/*"
+    ],
     "match": "T3 Code 进程未运行；注释明确 ~/.t3 保存线程历史与凭据，不清理",
     "default_selected": true,
     "risk": "medium",
@@ -1281,8 +1482,7 @@
     "command": null,
     "protected_by": ["P-01"],
     "source": "artifacts/mole-cli/lib/clean/dev.sh:5832-5890",
-    "in_app": "unknown",
-    "in_app_evidence": "App 的 .t3 未出现在 AI 目录表（report/p1a-strings.json:585-610）"
+    "in_app": "unknown"
   },
   {
     "id": "ai_tools-15",
@@ -1309,24 +1509,24 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:5949-5961,5962-6127",
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:5948-6125",
     "in_app": "unknown"
   },
   {
     "id": "ai_tools-17",
     "category": "ai_tools",
-    "paths": ["~/.codex/worktrees", "~/.claude/worktrees", "~/.t3/worktrees（仅作为搜索根）"],
+    "paths": ["~/.codex/worktrees", "~/.claude/worktrees", "~/.t3/worktrees"],
     "match": "只报告候选（report_agent_worktree_candidates / agent_worktree_containers），worktree 本体永不删除；容器根纳入 purge 搜索路径",
     "default_selected": false,
-    "risk": "high",
+    "risk": "low",
     "needs_admin": false,
-    "action": "delete",
+    "action": "report",
     "command": null,
     "protected_by": ["PG-08"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:3155-3260",
+    "source": "artifacts/mole-cli/lib/clean/user.sh:3155-3250",
     "secondary_source": "artifacts/mole-cli/lib/clean/purge_shared.sh:66-75",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:589,587 (.codex / .claude)"
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:587,591 (.claude / .codex)（仅同工具其他路径）"
   },
   {
     "id": "ai_tools-18",
@@ -1340,8 +1540,8 @@
     "command": null,
     "protected_by": ["P-01", "P-04"],
     "source": "artifacts/mole-cli/lib/clean/apps.sh:955-1030,1117-1200",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:398 (/Applications/Claude.app)"
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:398 (/Applications/Claude.app)、:78 (/Library/Caches/com.anthropic.claudefordesktop)（仅同工具其他路径）"
   },
   {
     "id": "ai_tools-19",
@@ -1353,6 +1553,8 @@
       "~/Library/Application Support/Code/CachedData/*",
       "~/Library/Application Support/Code/WebStorage/*/CacheStorage/*",
       "~/Library/Application Support/Cursor/CachedExtensionVSIXs/*",
+      "~/Library/Application Support/CodeBuddyExtension/Cache/*",
+      "~/Library/Application Support/CodeBuddyExtension/logs/*",
       "~/Library/Application Support/CodeBuddy CN/{Cache,CachedData,CachedExtensionVSIXs,Code Cache,GPUCache,DawnGraphiteCache,DawnWebGPUCache,logs}/*",
       "~/Library/Application Support/Zed/node/cache/*",
       "~/Library/Application Support/Zed/node/node-v*/cache/*"
@@ -1364,9 +1566,9 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:616-673",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:92-93 (com.codebuddy.extension), :604 (.vscode), :606 (.trae)"
+    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:616-659",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:92-93 (com.codebuddy.extension[.cn]), :96 (com.cursor.Cursor), :607 (.vscode), :72 (/Library/Caches/Zed)（仅同工具其他路径）"
   },
   {
     "id": "ai_tools-20",
@@ -1468,17 +1670,18 @@
   {
     "id": "xcode-06",
     "category": "xcode",
-    "paths": ["/Library/Developer/CoreSimulator/Caches（系统级）"],
-    "match": "进程守卫 + 身份绑定（clean_xcode_system_coresimulator_caches）",
+    "paths": ["/Library/Developer/CoreSimulator/Caches/*"],
+    "match": "仅当 SYSTEM_CLEAN=true 时进入（dev.sh:2183）；候选为缓存根下一级子项（find -mindepth 1 -maxdepth 1，根目录本身不删，dev.sh:2192），先剔除符号链接、白名单与受保护项/编译模型缓存（dev.sh:2200-2213）；扫描前及每次删除前都调用 _coresimulator_activity_state，CoreSimulator 未运行(1)才继续，运行中(0)延后清理、状态未知(2)跳过（dev.sh:2217、2298、2320）；非 dry-run 还需 has_sudo_session 或 ensure_sudo_session 成功，否则跳过（dev.sh:2283-2288）；逐项 safe_sudo_remove 经 file_ops.sh:2240-2244 sudo rm -rf 永久删除（调用点 dev.sh:2326 只传 path 与 size，未传 expected_parent 系列，故无身份三元组绑定）",
     "default_selected": true,
     "risk": "high",
     "needs_admin": true,
     "action": "delete",
     "command": null,
     "protected_by": ["N-01"],
-    "source": "artifacts/mole-cli/lib/clean/dev.sh:2181-2372",
+    "source": "artifacts/mole-cli/lib/clean/dev.sh:2181-2367",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:171"
+    "in_app_evidence": "report/p1a-strings.json:171",
+    "secondary_source": "artifacts/mole-cli/lib/core/file_ops.sh:2009-2292"
   },
   {
     "id": "xcode-07",
@@ -1538,18 +1741,19 @@
   {
     "id": "xcode-10",
     "category": "xcode",
-    "paths": ["~/Library/Developer/Xcode/Archives", "~/Library/MobileDevice"],
+    "paths": ["~/Library/Developer/Xcode/Archives"],
     "match": "App 字符串中出现；CLI 侧未见对应自动删除规则 → 视为“仅报告/需人工”",
     "default_selected": false,
-    "risk": "high",
+    "risk": "low",
     "needs_admin": false,
-    "action": "delete",
+    "action": "report",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "report/p1a-strings.json:568-569",
+    "source": "artifacts/mole-cli/lib/clean/user.sh:3806-3809",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:568 (~/Library/Developer/Xcode/Archives), :569 (~/Library/MobileDevice)",
-    "cli_status": "CLI 无同名自动删除点（dev.sh 仅见 DeviceSupport 与 DerivedData），未验证 App 是否真删"
+    "in_app_evidence": "report/p1a-strings.json:568 (~/Library/Developer/Xcode/Archives)",
+    "cli_status": "CLI 无同名自动删除点（dev.sh 仅见 DeviceSupport 与 DerivedData），未验证 App 是否真删",
+    "secondary_source": "artifacts/mole-cli/lib/clean/user.sh:3657-3678"
   },
   {
     "id": "xcode-11",
@@ -1627,17 +1831,17 @@
   {
     "id": "homebrew-05",
     "category": "homebrew",
-    "paths": ["/usr/local/Caskroom", "/usr/local/cellar", "/usr/local/opt", "/opt/homebrew/Caskroom", "/opt/homebrew/cellar", "/opt/homebrew/opt"],
-    "match": "Homebrew 安装位置根本身**不可删**（N-01 例外说明），子项仅由 Homebrew 自己的清理动作处理",
+    "paths": ["/usr/local", "/opt/homebrew"],
+    "match": "仅两个安装根不可删：`/usr/local/*`、`/opt/homebrew/*` 在 file_ops.sh:1051 一律 return 1（子项按设计可删），而根 `/usr/local` 命中 :1058 的 `/usr/*` deny 臂、`/opt/homebrew` 命中 :1068 的同名 deny 臂（:1101 的 exact_roots 再按 inode 复核大小写变体），二者均返回 0（关键路径）；`validate_path_for_deletion` 在 :1367-1369 据此 log_error 并 return 1 拒删。引擎内没有针对这两个根或其 Caskroom/cellar/opt 子目录的 safe_clean/safe_remove/rm（apps.sh:580-581 只作应用扫描路径、:1627 只把 /opt/homebrew/opt/*/bin 当包管理路径）。",
     "default_selected": false,
-    "risk": "high",
+    "risk": "low",
     "needs_admin": false,
-    "action": "delete",
+    "action": "protect",
     "command": null,
     "protected_by": ["N-01"],
-    "source": "artifacts/mole-cli/lib/core/file_ops.sh:1048-1053",
+    "source": "artifacts/mole-cli/lib/core/file_ops.sh:1044-1129",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:283,290,421 (/usr/local/Caskroom, /usr/local/cellar, /opt/homebrew/Caskroom)"
+    "in_app_evidence": "report/p1a-strings.json:282 (/usr/local), :420 (/opt/homebrew)"
   },
   {
     "id": "system-01",
@@ -1711,8 +1915,7 @@
     "command": null,
     "protected_by": ["N-01", "OP-01"],
     "source": "artifacts/mole-cli/lib/clean/system.sh:150-266,434-549",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:296 (/usr/sbin/installer)"
+    "in_app": "unknown"
   },
   {
     "id": "system-06",
@@ -1732,15 +1935,22 @@
   {
     "id": "system-07",
     "category": "system",
-    "paths": ["可重建 GPU 缓存目录（is_rebuildable_gpu_cache_dir + gpu_cache_dir_is_stale 判定面）"],
-    "match": "两段判定：目录是否可重建 + 是否陈旧；EDR 传感器缓存被 is_endpoint_security_cache_path 拒绝（P-06）",
+    "paths": [
+      "/private/var/folders/*/*/C/*/com.apple.gpuarchiver",
+      "/private/var/folders/*/*/C/*/com.apple.metal",
+      "/private/var/folders/*/*/C/*/com.apple.metalfe",
+      "/var/folders/*/*/C/*/com.apple.gpuarchiver",
+      "/var/folders/*/*/C/*/com.apple.metal",
+      "/var/folders/*/*/C/*/com.apple.metalfe"
+    ],
+    "match": "两段判定（system.sh:666、:673）：is_rebuildable_gpu_cache_dir 只认 /private/var/folders 与 /var/folders 下 */C/* 的 com.apple.gpuarchiver / com.apple.metal / com.apple.metalfe（:16-26，T/ 与非 C 分片一律拒绝）；gpu_cache_dir_is_stale 用 /usr/bin/find \"$cache_dir\" -type f -mtime -1（:44-45）判目录内近 1 天（MOLE_GPU_CACHE_AGE_DAYS=1，base.sh:162）无文件改动才算陈旧，符号链接（:36）或探测超时/信号（:46-49）即保留。扫描口径为 /private/var/folders -maxdepth 8，剪掉深度 3 的非 C 目录并要求 -path \"*/C/*\"（:651-658）；命中 is_endpoint_security_cache_path 的 EDR 缓存跳过（:669-671，app_protection.sh:271），陈旧者经 safe_sudo_remove 永久删除（:683）。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": true,
     "action": "delete",
     "command": null,
     "protected_by": ["P-06"],
-    "source": "artifacts/mole-cli/lib/clean/system.sh:9-57,627-700",
+    "source": "artifacts/mole-cli/lib/clean/system.sh:9-52, artifacts/mole-cli/lib/clean/system.sh:638-710",
     "in_app": "unknown"
   },
   {
@@ -1750,27 +1960,28 @@
     "match": "EDR/MDM 代理 clone 被 P-06 拒绝；仅清浏览器相关 clone",
     "default_selected": true,
     "risk": "medium",
-    "needs_admin": true,
+    "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-06"],
     "source": "artifacts/mole-cli/lib/clean/system.sh:561-574",
-    "in_app": false
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:62,103 (/Library/Caches/Google/Chrome、/Library/Caches/com.google.Chrome)、:91 (/Library/Caches/com.brave.Browser)、:117 (/Library/Caches/com.microsoft.edgemac)、:154 (/Library/Caches/net.imput.helium)（仅同工具其他路径）",
+    "secondary_source": "artifacts/mole-cli/lib/core/browser_clones.sh:117-148"
   },
   {
     "id": "system-09",
     "category": "system",
     "paths": ["空闲下载临时文件（CFNetworkDownload_*.tmp，idle_tmp_dir 判定面）"],
-    "match": "仅当目录被判定空闲；maxdepth 限定；根属 OS 所有故需 sudo",
+    "match": "先以 sudo find /private/var/folders -maxdepth 5 -type d -name com.apple.idleassetsd -path \"*/T/*\" 定位 idleassetsd 临时目录，再对每个目录删除 -maxdepth 5 -type f 且 mtime 超过 7 天（MOLE_TEMP_FILE_AGE_DAYS）的 CFNetworkDownload_*.tmp；无进程级空闲探测，仅凭 mtime 判「陈旧」，目录属 root（mode 700）故扫描与删除全程 sudo -n。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": true,
     "action": "delete",
     "command": null,
     "protected_by": [],
-    "source": "artifacts/mole-cli/lib/clean/system.sh:701-770",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:85 (/Library/Caches/com.apple.nsurlsessiond/Downloads/)"
+    "source": "artifacts/mole-cli/lib/clean/system.sh:716-773",
+    "in_app": "unknown"
   },
   {
     "id": "system-10",
@@ -1783,9 +1994,9 @@
     "action": "delete",
     "command": null,
     "protected_by": [],
-    "source": "artifacts/mole-cli/lib/clean/system.sh:771-810",
+    "source": "artifacts/mole-cli/lib/clean/system.sh:779-823",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:442-443"
+    "in_app_evidence": "report/p1a-strings.json:443"
   },
   {
     "id": "system-11",
@@ -1798,7 +2009,7 @@
     "action": "delete",
     "command": null,
     "protected_by": ["OP-02"],
-    "source": "artifacts/mole-cli/lib/clean/system.sh:811-860",
+    "source": "artifacts/mole-cli/lib/clean/system.sh:825-849",
     "in_app": "unknown"
   },
   {
@@ -1812,7 +2023,7 @@
     "action": "delete",
     "command": null,
     "protected_by": [],
-    "source": "artifacts/mole-cli/lib/clean/system.sh:861-920",
+    "source": "artifacts/mole-cli/lib/clean/system.sh:850-919",
     "in_app": true,
     "in_app_evidence": "report/p1a-strings.json:446"
   },
@@ -1823,13 +2034,13 @@
     "match": "候选身份 + 活动状态双重复核（time_machine_candidate_identity / still_eligible）；tm_is_running 时跳过",
     "default_selected": true,
     "risk": "medium",
-    "needs_admin": true,
+    "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/system.sh:922-1010,1405-1429",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:473 (com.apple.TimeMachine.plist)"
+    "source": "artifacts/mole-cli/lib/clean/system.sh:922-1401, artifacts/mole-cli/lib/clean/system.sh:1405-1427",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:473 (/Library/Preferences/com.apple.TimeMachine.plist)（仅同工具其他路径）"
   },
   {
     "id": "system-14",
@@ -1852,13 +2063,13 @@
     "paths": ["/Library/Updates", "/macOS Install Data"],
     "match": "**明确不删**：Software Update 拥有，年龄/进程/plist 都不能证明在 scan→delete 窗口内非活动",
     "default_selected": false,
-    "risk": "high",
+    "risk": "low",
     "needs_admin": false,
-    "action": "delete",
+    "action": "protect",
     "command": null,
     "protected_by": ["OP-01"],
     "source": "artifacts/mole-cli/lib/clean/system.sh:424-432",
-    "in_app": false
+    "in_app": "unknown"
   },
   {
     "id": "app_leftovers-01",
@@ -1871,22 +2082,22 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/apps.sh:10-118（排除表 28-35，maxdepth 37-39）",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:61 (/Library/Caches/FreeCADStartThumbnails 同段 Finder 元数据)"
+    "source": "artifacts/mole-cli/lib/clean/apps.sh:10-118",
+    "in_app": "unknown"
   },
   {
     "id": "app_leftovers-02",
     "category": "app_leftovers",
     "paths": [
-      "~/Library/Caches/<bundle-id>（孤儿缓存）",
-      "~/Library/Application Support/<app>（孤儿支持目录）",
-      "~/Library/Preferences/<bundle-id>.plist（孤儿偏好）",
-      "~/Library/Logs/<app>（孤儿日志）",
-      "~/Library/Saved Application State/<bundle-id>.savedState（孤儿状态）",
-      "~/Library/LaunchAgents/<bundle-id>.plist（孤儿启动项）",
-      "~/Library/Containers/<bundle-id>（孤儿容器）",
-      "~/Library/Group Containers/<group-id>"
+      "~/Library/Caches/com.*",
+      "~/Library/Caches/org.*",
+      "~/Library/Caches/net.*",
+      "~/Library/Caches/io.*",
+      "~/Library/Logs/com.*",
+      "~/Library/Logs/org.*",
+      "~/Library/Logs/net.*",
+      "~/Library/Logs/io.*",
+      "~/Library/Saved Application State/*.savedState"
     ],
     "match": "先扫描“已安装/活动中应用”清单（scan_installed_apps，mdfind + 常见安装位）；仅当 bundle 判定为孤儿（is_bundle_orphaned）且满足陈旧条件（_orphan_path_is_stale）才删；每项做身份快照（orphan_cleanup_candidate_snapshot）并在删除前复核（orphan_cleanup_candidate_still_eligible）；白名单跳过；扫描失败即整段跳过",
     "default_selected": true,
@@ -1895,9 +2106,9 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01", "P-02", "P-04", "N-16"],
-    "source": "artifacts/mole-cli/lib/clean/apps.sh:119-162,524-1074,1075-1323",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:766 (RemnantScanner), :772 (TrashRemnantCoordinator)"
+    "source": "artifacts/mole-cli/lib/clean/apps.sh:1075-1319",
+    "in_app": "unknown",
+    "secondary_source": "artifacts/mole-cli/lib/clean/apps.sh:524-1074"
   },
   {
     "id": "app_leftovers-03",
@@ -1925,24 +2136,24 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/apps.sh:2431-2639（模式表 2516-2521，sibling 检查 2541-2555）",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:242 (com.macpaw.*) 在保护名单；此处是容器 stub 例外"
+    "source": "artifacts/mole-cli/lib/clean/apps.sh:2504-2639",
+    "in_app": "unknown",
+    "secondary_source": "artifacts/mole-cli/lib/clean/apps.sh:2431-2502"
   },
   {
     "id": "app_leftovers-05",
     "category": "app_leftovers",
     "paths": ["崩溃上报器残留目录（clean_support_app_data 判定面：crash reporter 数据）"],
-    "match": "safe_find_delete 按 support_age_days 年龄（MOLE_LOG_AGE_DAYS=7）清理，maxdepth 限定",
+    "match": "只扫描 $HOME/Library/Application Support/CrashReporter（须为真实目录、非符号链接），safe_find_delete 固定 -maxdepth 5 -name * -type f，只删 mtime 早于 30 天（support_age_days=30）的文件，非 MOLE_LOG_AGE_DAYS 的 7 天；超时/信号按取消传播。函数末三处 Messages 预览/表情缓存属 user_cache-06。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:1077-1105",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:69 (/Library/Caches/SentryCrash/), :95 (com.crashlytics.data)"
+    "source": "artifacts/mole-cli/lib/clean/user.sh:1077-1099",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:69 (/Library/Caches/SentryCrash/)（仅同工具其他路径）"
   },
   {
     "id": "app_cache-01",
@@ -2015,22 +2226,39 @@
   {
     "id": "app_cache-05",
     "category": "user_cache",
-    "paths": ["~/Library/Caches/org.blenderfoundation.blender/*", "~/Library/Caches/com.maxon.cinema4d/*", "~/Library/Caches/com.sketchup.*/*", "Autodesk Fusion 旧版本目录（clean_autodesk_fusion_old_bundles）"],
+    "paths": [
+      "~/Library/Caches/org.blenderfoundation.blender/*",
+      "~/Library/Caches/com.maxon.cinema4d/*",
+      "~/Library/Caches/com.sketchup.*/*",
+      "Autodesk Fusion 旧版本目录（clean_autodesk_fusion_old_bundles）"
+    ],
     "match": "Fusion 旧版本：从可信 production 根解析 current 版本，只删更旧版本目录；删除前 _autodesk_fusion_guard_current_is_unchanged 复核 current 未变；Autodesk 缓存另有进程守卫（_autodesk_cache_delete_guard_allows）",
     "default_selected": true,
-    "risk": "high",
+    "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01", "P-06"],
-    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:1277-1928",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:500 (/Library/Logs/CreativeCloud 同族)"
+    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:1277-1921",
+    "in_app": "unknown"
   },
   {
     "id": "app_cache-06",
     "category": "user_cache",
-    "paths": ["~/Library/Caches/com.tw93.MiaoYan/*", "~/Library/Caches/com.klee.desktop/*", "~/Library/Caches/klee_desktop/*", "~/Library/Caches/com.orabrowser.app/*", "~/Library/Caches/com.filo.client/*", "~/Library/Caches/com.flomoapp.mac/*", "~/Library/Application Support/Quark/Cache/videoCache/*", "~/Library/Containers/com.ranchero.NetNewsWire-Evergreen/Data/Library/Caches/*", "~/Library/Containers/com.ideasoncanvas.mindnode/Data/Library/Caches/*", "~/.cache/kaku/*", "~/Library/Application Support/spacedrive/thumbnails/*", "~/Library/Containers/is.follow/Data/Library/Application Support/Folo/Cache/Cache_Data/*"],
+    "paths": [
+      "~/Library/Caches/com.tw93.MiaoYan/*",
+      "~/Library/Caches/com.klee.desktop/*",
+      "~/Library/Caches/klee_desktop/*",
+      "~/Library/Caches/com.orabrowser.app/*",
+      "~/Library/Caches/com.filo.client/*",
+      "~/Library/Caches/com.flomoapp.mac/*",
+      "~/Library/Application Support/Quark/Cache/videoCache/*",
+      "~/Library/Containers/com.ranchero.NetNewsWire-Evergreen/Data/Library/Caches/*",
+      "~/Library/Containers/com.ideasoncanvas.mindnode/Data/Library/Caches/*",
+      "~/.cache/kaku/*",
+      "~/Library/Application Support/spacedrive/thumbnails/*",
+      "~/Library/Containers/is.follow/Data/Library/Application Support/Folo/Cache/Cache_Data/*"
+    ],
     "match": null,
     "default_selected": true,
     "risk": "low",
@@ -2039,29 +2267,60 @@
     "command": null,
     "protected_by": ["P-01"],
     "source": "artifacts/mole-cli/lib/clean/app_caches.sh:1963-1976",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:142,153 (com.yetone.magpie, magpie)"
+    "in_app": "unknown"
   },
   {
     "id": "app_cache-07",
     "category": "user_cache",
-    "paths": ["~/Library/Caches/com.apple.Music", "~/Library/Caches/com.apple.podcasts", "~/Library/Containers/com.apple.podcasts/Data/tmp/StreamedMedia", "…/com.apple.podcasts/Data/tmp/*.heic|*.img|*CFNetworkDownload*.tmp", "~/Library/Caches/com.apple.TV/*", "~/Library/Caches/tv.plex.player.desktop", "~/Library/Caches/com.netease.163music", "~/Library/Caches/com.tencent.QQMusic/*", "~/Library/Caches/com.tencent.QQMusicMac/*", "QQMusic 容器内 iRRCache / iLog / iCache / iTemp", "~/Library/Containers/com.tencent.QQMusicMac/Data/Library/Caches/*", "~/Library/Caches/com.kugou.mac/*", "~/Library/Caches/com.kuwo.mac/*"],
-    "match": "Podcasts tmp 只清指定扩展名与 StreamedMedia（不动 tmp 其它内容）",
+    "paths": [
+      "~/Library/Caches/com.apple.Music",
+      "~/Library/Caches/com.apple.podcasts",
+      "~/Library/Containers/com.apple.podcasts/Data/tmp/StreamedMedia",
+      "…/com.apple.podcasts/Data/tmp/*.heic|*.img|*CFNetworkDownload*.tmp",
+      "~/Library/Caches/com.apple.TV/*",
+      "~/Library/Caches/tv.plex.player.desktop",
+      "~/Library/Caches/com.netease.163music",
+      "~/Library/Caches/com.tencent.QQMusic/*",
+      "~/Library/Caches/com.tencent.QQMusicMac/*",
+      "~/Library/Containers/com.tencent.QQMusicMac/Data/Library/Application Support/QQMusicMac/iRRCache/*",
+      "~/Library/Containers/com.tencent.QQMusicMac/Data/Library/Application Support/QQMusicMac/iLog/*",
+      "~/Library/Containers/com.tencent.QQMusicMac/Data/Library/Application Support/QQMusicMac/iCache/*",
+      "~/Library/Containers/com.tencent.QQMusicMac/Data/Library/Application Support/QQMusicMac/iTemp/*",
+      "~/Library/Containers/com.tencent.QQMusicMac/Data/Library/Caches/*",
+      "~/Library/Caches/com.kugou.mac/*",
+      "~/Library/Caches/com.kuwo.mac/*"
+    ],
+    "match": "Podcasts 容器内只删 StreamedMedia 整目录、tmp 一级的 *.heic / *.img / *CFNetworkDownload*.tmp 三类 glob，不动 tmp 其它内容；QQ Music 容器的 iRRCache / iLog / iCache / iTemp 四项仅在容器目录存在时（-d 判定）逐个清理。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:1979-2006",
+    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:1979-2005",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:84 (com.apple.mail 同段), :120 (com.netease.163music)"
+    "in_app_evidence": "report/p1a-strings.json:86 (/Library/Caches/com.apple.podcasts), :120 (/Library/Caches/com.netease.163music), :131 (/Library/Caches/com.tencent.QQMusicMac)"
   },
   {
     "id": "app_cache-08",
     "category": "user_cache",
-    "paths": ["~/Library/Caches/com.colliderli.iina", "~/Library/Caches/org.videolan.vlc", "~/Library/Caches/io.mpv", "~/Library/Caches/com.iqiyi.player", "~/Library/Caches/com.tencent.tenvideo", "TencentVideo 的 Upgrade / VideoNative / documentCache", "~/Library/Caches/tv.danmaku.bili/*", "~/Library/Caches/com.douyu.*/*", "~/Library/Caches/com.huya.*/*", "~/Library/Containers/com.wuziqi.SenPlayer/Data/tmp/videoCache/*", "~/Library/Caches/smart.stremio*/*", "~/Library/Application Support/stremio/stremio-server/stremio-cache/*"],
-    "match": "TencentVideo 的 Upgrade 目录是旧安装器，可与缓存一起清",
+    "paths": [
+      "~/Library/Caches/com.colliderli.iina",
+      "~/Library/Caches/org.videolan.vlc",
+      "~/Library/Caches/io.mpv",
+      "~/Library/Caches/com.iqiyi.player",
+      "~/Library/Caches/com.tencent.tenvideo",
+      "~/Library/Containers/com.tencent.tenvideo/Data/Library/Application Support/Upgrade/*",
+      "~/Library/Containers/com.tencent.tenvideo/Data/Library/Application Support/VideoNative/*",
+      "~/Library/Containers/com.tencent.tenvideo/Data/Library/Application Support/documentCache/*",
+      "~/Library/Caches/tv.danmaku.bili/*",
+      "~/Library/Caches/com.douyu.*/*",
+      "~/Library/Caches/com.huya.*/*",
+      "~/Library/Containers/com.wuziqi.SenPlayer/Data/tmp/videoCache/*",
+      "~/Library/Caches/smart.stremio*/*",
+      "~/Library/Application Support/stremio/stremio-server/stremio-cache/*"
+    ],
+    "match": "Tencent Video 的沙盒容器目录 `~/Library/Containers/com.tencent.tenvideo/Data/Library/Application Support` 存在时，才清理其下的 `Upgrade`（旧安装器）、`VideoNative`、`documentCache` 三个子目录，与其它视频播放器缓存一同清理。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
@@ -2070,7 +2329,7 @@
     "protected_by": ["P-01"],
     "source": "artifacts/mole-cli/lib/clean/app_caches.sh:2007-2029",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:94,107,157,337 (/Library/Caches/com.colliderli.iina, com.iqiyi.player, org.videolan.vlc, SenPlayer)"
+    "in_app_evidence": "report/p1a-strings.json:94,107,157,337"
   },
   {
     "id": "app_cache-09",
@@ -2089,22 +2348,60 @@
   {
     "id": "app_cache-10",
     "category": "user_cache",
-    "paths": ["~/Library/Caches/com.valvesoftware.steam/*", "~/Library/Application Support/Steam/htmlcache|appcache|depotcache|steamapps/shadercache|logs/*", "~/Library/Caches/com.epicgames.EpicGamesLauncher/*", "~/Library/Caches/com.blizzard.Battle.net/*", "~/Library/Application Support/Battle.net/Cache/*", "~/Library/Caches/com.ea.*/*", "~/Library/Caches/com.gog.galaxy/*", "~/Library/Caches/com.riotgames.*/*", "~/Library/Application Support/minecraft/{logs,crash-reports,webcache,webcache2}/*", "~/.lunarclient/{game-cache,launcher-cache,logs}/*", "~/.lunarclient/offline/*/logs/*", "~/.lunarclient/offline/files/*/logs/*", "~/Library/Caches/net.pcsx2.PCSX2/*", "~/Library/Application Support/PCSX2/cache/*", "~/Library/Logs/PCSX2/*", "~/Library/Caches/net.rpcs3.rpcs3/*", "~/Library/Application Support/rpcs3/logs/*"],
-    "match": "Steam 只清可重建缓存子目录（N-09 在 uninstall 模式保护整库）",
+    "paths": [
+      "~/Library/Caches/com.valvesoftware.steam/*",
+      "~/Library/Application Support/Steam/htmlcache/*",
+      "~/Library/Application Support/Steam/appcache/*",
+      "~/Library/Application Support/Steam/depotcache/*",
+      "~/Library/Application Support/Steam/steamapps/shadercache/*",
+      "~/Library/Application Support/Steam/logs/*",
+      "~/Library/Caches/com.epicgames.EpicGamesLauncher/*",
+      "~/Library/Caches/com.blizzard.Battle.net/*",
+      "~/Library/Application Support/Battle.net/Cache/*",
+      "~/Library/Caches/com.ea.*/*",
+      "~/Library/Caches/com.gog.galaxy/*",
+      "~/Library/Caches/com.riotgames.*/*",
+      "~/Library/Application Support/minecraft/logs/*",
+      "~/Library/Application Support/minecraft/crash-reports/*",
+      "~/Library/Application Support/minecraft/webcache/*",
+      "~/Library/Application Support/minecraft/webcache2/*",
+      "~/.lunarclient/game-cache/*",
+      "~/.lunarclient/launcher-cache/*",
+      "~/.lunarclient/logs/*",
+      "~/.lunarclient/offline/*/logs/*",
+      "~/.lunarclient/offline/files/*/logs/*",
+      "~/Library/Caches/net.pcsx2.PCSX2/*",
+      "~/Library/Application Support/PCSX2/cache/*",
+      "~/Library/Logs/PCSX2/*",
+      "~/Library/Caches/net.rpcs3.rpcs3/*",
+      "~/Library/Application Support/rpcs3/logs/*"
+    ],
+    "match": "Steam：`~/Library/Caches/com.valvesoftware.steam/*` 无条件清理；仅当 `~/Library/Application Support/Steam` 存在时，才清其下 htmlcache/appcache/depotcache/steamapps/shadercache/logs 六个可重建缓存子目录，steamapps/common 游戏库与 userdata 不在清理范围（整库保护 P-09 仅在 uninstall 模式生效）。Battle.net（App Support 下的 Cache）、Minecraft、Lunar Client、PCSX2（App Support 下的 cache 与 Logs）、RPCS3（Caches 与 App Support 下的 logs）分别以该工具根目录 `-d` 存在为门控；Epic、EA、GOG、Riot 的 Caches 与 PCSX2 的 net.pcsx2 缓存在各自位置存在时才清理。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01", "P-09"],
-    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:2105-2145",
+    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:2105-2144",
     "in_app": true,
     "in_app_evidence": "report/p1a-strings.json:70 (/Library/Caches/Steam)"
   },
   {
     "id": "app_cache-11",
     "category": "user_cache",
-    "paths": ["~/Library/Caches/com.youdao.YoudaoDict", "~/Library/Caches/com.eudic.*", "~/Library/Caches/com.bob-build.Bob", "~/Library/Caches/com.cleanshot.*", "~/Library/Caches/com.reincubate.camo", "~/Library/Caches/com.xnipapp.xnip", "~/Library/Caches/com.readdle.smartemail-Mac", "~/Library/Caches/com.airmail.*", "~/Library/Caches/com.todoist.mac.Todoist", "~/Library/Caches/com.any.do.*"],
+    "paths": [
+      "~/Library/Caches/com.youdao.YoudaoDict",
+      "~/Library/Caches/com.eudic.*",
+      "~/Library/Caches/com.bob-build.Bob",
+      "~/Library/Caches/com.cleanshot.*",
+      "~/Library/Caches/com.reincubate.camo",
+      "~/Library/Caches/com.xnipapp.xnip",
+      "~/Library/Caches/com.readdle.smartemail-Mac",
+      "~/Library/Caches/com.airmail.*",
+      "~/Library/Caches/com.todoist.mac.Todoist",
+      "~/Library/Caches/com.any.do.*"
+    ],
     "match": "翻译 / 截图 / 邮件 / 任务类应用缓存（无进程守卫）",
     "default_selected": true,
     "risk": "low",
@@ -2112,29 +2409,64 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:2146-2167",
+    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:2146-2166",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:144,140,158 (com.youdao.YoudaoDict, com.xnip.xnip, pl.maketheweb.cleanshotx)"
+    "in_app_evidence": "report/p1a-strings.json:144,140 (com.youdao.YoudaoDict, com.xnip.xnip)"
   },
   {
     "id": "app_cache-12",
     "category": "user_cache",
-    "paths": ["~/.zcompdump*", "~/.lesshst", "~/.viminfo.tmp", "~/.wget-hsts", "~/.cacher/logs/*", "~/.kite/logs/*", "~/Library/Caches/dev.warp.Warp-Stable/*", "~/Library/Logs/warp.log", "~/Library/Caches/SentryCrash/Warp/*", "~/Library/Caches/com.mitchellh.ghostty/*", "~/Library/Caches/com.runjuu.Input-Source-Pro/*", "~/Library/Caches/macos-wakatime.WakaTime/*", "~/Library/Application Support/WeType/com.onevcat.Kingfisher.ImageCache.WeType/*", "~/Library/Application Support/WeType/DictUpdate/*", "mihomo-party 的 Cache/Code Cache/GPUCache/DawnGraphiteCache/DawnWebGPUCache/logs/*"],
-    "match": "shell 工具残留与系统工具缓存；mihomo-party 带进程守卫",
+    "paths": [
+      "~/.zcompdump*",
+      "~/.lesshst",
+      "~/.viminfo.tmp",
+      "~/.wget-hsts",
+      "~/.cacher/logs/*",
+      "~/.kite/logs/*",
+      "~/Library/Caches/dev.warp.Warp-Stable/*",
+      "~/Library/Logs/warp.log",
+      "~/Library/Caches/SentryCrash/Warp/*",
+      "~/Library/Caches/com.mitchellh.ghostty/*",
+      "~/Library/Caches/com.runjuu.Input-Source-Pro/*",
+      "~/Library/Caches/macos-wakatime.WakaTime/*",
+      "~/Library/Application Support/WeType/com.onevcat.Kingfisher.ImageCache.WeType/*",
+      "~/Library/Application Support/WeType/DictUpdate/*",
+      "~/Library/Application Support/mihomo-party/Cache/*",
+      "~/Library/Application Support/mihomo-party/Code Cache/*",
+      "~/Library/Application Support/mihomo-party/GPUCache/*",
+      "~/Library/Application Support/mihomo-party/DawnGraphiteCache/*",
+      "~/Library/Application Support/mihomo-party/DawnWebGPUCache/*",
+      "~/Library/Application Support/mihomo-party/logs/*"
+    ],
+    "match": "仅当 ~/Library/Application Support/mihomo-party 目录存在时处理它（app_caches.sh:2188）；其 Cache/Code Cache/GPUCache/DawnGraphiteCache/DawnWebGPUCache/logs 六项经 mole_safe_clean_app_cache 走进程守卫（base.sh:2126），应用在跑或进程状态未知则跳过并延后。其余 shell 工具缓存与 Warp/Ghostty/Input Source Pro/WakaTime/WeType 路径直接 safe_clean，无进程守卫（app_caches.sh:2169-2186）。",
     "default_selected": true,
     "risk": "low",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:2168-2199",
+    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:2168-2198",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:119,150,178 (com.mitchellh.ghostty, dev.warp.Warp-Stable)"
+    "in_app_evidence": "report/p1a-strings.json:119,150,69 (com.mitchellh.ghostty, dev.warp.Warp-Stable, SentryCrash)"
   },
   {
     "id": "app_cache-13",
     "category": "user_cache",
-    "paths": ["~/Library/Caches/ws.stash.app.mac/*", "~/Library/Caches/notion.id/*", "~/Library/Caches/md.obsidian/*", "~/Library/Caches/com.logseq.*/*", "~/Library/Caches/com.bear-writer.*/*", "~/Library/Caches/com.evernote.*/*", "~/Library/Caches/com.yinxiang.*/*", "~/Library/Caches/com.runningwithcrayons.Alfred/*", "~/Library/Caches/cx.c3.theunarchiver/*", "~/Library/Caches/com.teamviewer.*/*", "~/Library/Caches/com.anydesk.*/*", "~/Library/Caches/com.todesk.*/*", "~/Library/Caches/com.sunlogin.*/*"],
+    "paths": [
+      "~/Library/Caches/ws.stash.app.mac/*",
+      "~/Library/Caches/notion.id/*",
+      "~/Library/Caches/md.obsidian/*",
+      "~/Library/Caches/com.logseq.*/*",
+      "~/Library/Caches/com.bear-writer.*/*",
+      "~/Library/Caches/com.evernote.*/*",
+      "~/Library/Caches/com.yinxiang.*/*",
+      "~/Library/Caches/com.runningwithcrayons.Alfred/*",
+      "~/Library/Caches/cx.c3.theunarchiver/*",
+      "~/Library/Caches/com.teamviewer.*/*",
+      "~/Library/Caches/com.anydesk.*/*",
+      "~/Library/Caches/com.todesk.*/*",
+      "~/Library/Caches/com.sunlogin.*/*"
+    ],
     "match": "笔记类与启动器、远程桌面缓存；Notion 另有 service worker 清除（clean_notion_service_worker_caches）",
     "default_selected": true,
     "risk": "low",
@@ -2142,14 +2474,26 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:2200-2219",
+    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:2196-2219",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:101,126,137,143 (/Library/Caches/com.evernote.Evernote, com.raycast.macos, com.todesk.mac)"
+    "in_app_evidence": "report/p1a-strings.json:101,124,127,130,137,143 (/Library/Caches/com.evernote.Evernote, com.philandro.anydesk, com.runningwithcrayons.Alfred, com.teamviewer.TeamViewer, com.todesk.mac, com.yinxiang.MacHelper)"
   },
   {
     "id": "app_cache-14",
     "category": "user_cache",
-    "paths": ["编辑器 .obsolete 日志标记的陈旧扩展目录（clean_editor_obsolete_extensions）", "~/Library/Application Support/Code/{logs,Cache,CachedExtensionVSIXs,CachedData}/*", "~/Library/Application Support/Code/WebStorage/*/CacheStorage/*", "~/Library/Application Support/Cursor/CachedExtensionVSIXs/*", "~/Library/Caches/com.sublimetext.*/*", "~/Library/Caches/Zed/*", "~/Library/Application Support/Zed/node/cache/*", "~/Library/Application Support/Zed/node/node-v*/cache/*", "~/Library/Logs/Zed/*", "CodeBuddy CN 的 Cache/CachedData/CachedExtensionVSIXs/Code Cache/GPUCache/DawnGraphiteCache/DawnWebGPUCache/logs/*"],
+    "paths": [
+      "~/Library/Application Support/Code/{logs,Cache,CachedExtensionVSIXs,CachedData}/*",
+      "~/Library/Application Support/Code/WebStorage/*/CacheStorage/*",
+      "~/Library/Application Support/Cursor/CachedExtensionVSIXs/*",
+      "~/Library/Caches/com.sublimetext.*/*",
+      "~/Library/Caches/Zed/*",
+      "~/Library/Application Support/Zed/node/cache/*",
+      "~/Library/Application Support/Zed/node/node-v*/cache/*",
+      "~/Library/Logs/Zed/*",
+      "~/Library/Application Support/CodeBuddyExtension/Cache/*",
+      "~/Library/Application Support/CodeBuddyExtension/logs/*",
+      "CodeBuddy CN 的 Cache/CachedData/CachedExtensionVSIXs/Code Cache/GPUCache/DawnGraphiteCache/DawnWebGPUCache/logs/*"
+    ],
     "match": "obsolete 扩展解析必须读 plutil -convert xml1 的 XML（**禁止**解析 plutil -p，其输出不稳定且深度不敏感，曾导致错误删除，上游 #1512）；CodeBuddy 有共享缓存进程判定",
     "default_selected": true,
     "risk": "medium",
@@ -2157,44 +2501,75 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:538-673",
+    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:538-659",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:72 (/Library/Caches/Zed), :92-93 (com.codebuddy.extension)"
+    "in_app_evidence": "report/p1a-strings.json:72 (/Library/Caches/Zed)"
   },
   {
     "id": "app_cache-15",
     "category": "user_cache",
-    "paths": ["微信 / 企业微信 容器缓存（clean_wechat_container_caches / _clean_messaging_container_roots 判定面）", "~/Library/Caches/com.tencent.WeWorkMac/*"],
-    "match": "容器删除守卫 _wechat_container_delete_guard_allows / _wecom_container_delete_guard_allows；只清 Data/Library/Caches 与 Data/tmp 及微信内置浏览器 profile 的 Cache/SW CacheStorage（P-10）",
+    "paths": [
+      "~/Library/Containers/com.tencent.xinWeChat/Data/Documents/app_data/log/*",
+      "~/Library/Containers/com.tencent.xinWeChat/Data/.wxapplet/WMPF/*",
+      "~/Library/Containers/com.tencent.xinWeChat/Data/Documents/app_data/radium/web/profiles/*/Cache/*",
+      "~/Library/Containers/com.tencent.xinWeChat/Data/Documents/app_data/radium/web/profiles/*/Service Worker/CacheStorage/*",
+      "~/Library/Containers/com.tencent.WeWorkMac/Data/Library/Application Support/WXWork/Log/*",
+      "~/Library/Containers/com.tencent.WeWorkMac/Data/Documents/cefcache/{Default,wew_<数字>}/{Cache,Code Cache,GPUCache,Service Worker/CacheStorage}/*"
+    ],
+    "match": "仅当微信/企业微信容器 Data 目录存在时执行（app_caches.sh:1046）；微信只清 app_data/log、.wxapplet/WMPF 及内置浏览器每个 profile 的 Cache 与 Service Worker/CacheStorage（:1051-1065），企业微信（WeCom）只清 WXWork/Log 与 cefcache 下 Default 或 wew_<数字> profile 的 Cache/Code Cache/GPUCache/Service Worker/CacheStorage（:1075-1096），逐条经 _wechat_container_delete_guard_allows（:941）/ _wecom_container_delete_guard_allows（:963）校验，跳过软链 profile。微信或企业微信进程在跑时整体跳过并延后清理（:941/:963 内的 mole_clean_process_guard 与 :1021-1026）。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01", "P-10"],
-    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:878-1105（守卫 900-983）",
+    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:1044-1103",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:169 (/Library/Containers/com.tencent.xinWeChat/Data/Library/Caches)"
+    "in_app_evidence": "report/p1a-strings.json:169 (/Library/Containers/com.tencent.xinWeChat/Data/Library/Caches)",
+    "secondary_source": "artifacts/mole-cli/lib/clean/app_caches.sh:941-983"
   },
   {
     "id": "cloud_office-01",
     "category": "user_cache",
-    "paths": ["~/Library/Caches/com.baidu.netdisk", "~/Library/Caches/com.alibaba.teambitiondisk", "~/Library/Caches/com.box.desktop", "云盘缓存（clean_cloud_storage 判定面：Dropbox / Google Drive / OneDrive 等）"],
-    "match": "各云盘进程守卫（_dropbox_process_state / _google_drive_process_state / _onedrive_process_state）；只清缓存，不同步目录本体",
+    "paths": [
+      "~/Library/Caches/com.baidu.netdisk",
+      "~/Library/Caches/com.alibaba.teambitiondisk",
+      "~/Library/Caches/com.box.desktop",
+      "~/Library/Caches/com.getdropbox.dropbox",
+      "~/Library/Caches/com.dropbox.*",
+      "~/Library/Caches/com.google.GoogleDrive",
+      "~/Library/Caches/com.microsoft.OneDrive"
+    ],
+    "match": "Dropbox / Google Drive / OneDrive 按进程三态分别处理（_dropbox_process_state / _google_drive_process_state / _onedrive_process_state，user.sh:799-809）：未运行则经 _user_safe_clean_process_guarded 清缓存，运行中则延后到退出后清理，状态未知则跳过并提示；只清 Caches 缓存，不碰同步目录本体。百度网盘、阿里云盘（teambitiondisk）、Box 三条为裸 safe_clean，无进程守卫。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01", "N-02", "N-03"],
-    "source": "artifacts/mole-cli/lib/clean/app_caches.sh:2380-2439（单点 2417-2419）",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:104 (/Library/Caches/com.google.GoogleDrive), :113 (com.microsoft.OneDrive), :326 (/Library/CloudStorage/Dropbox)"
+    "source": "artifacts/mole-cli/lib/clean/user.sh:2380-2437",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:104 (/Library/Caches/com.google.GoogleDrive)、:102 (/Library/Caches/com.getdropbox.dropbox)、:113 (/Library/Caches/com.microsoft.OneDrive)（仅 Dropbox/Google Drive/OneDrive，百度网盘/teambitiondisk/Box 无对应字符串）"
   },
   {
     "id": "cloud_office-02",
     "category": "user_cache",
-    "paths": ["~/Library/Caches/com.microsoft.Word", "~/Library/Caches/com.microsoft.Excel", "~/Library/Caches/com.microsoft.Powerpoint", "~/Library/Caches/com.microsoft.Outlook/*", "~/Library/Caches/com.apple.iWork.*", "~/Library/Caches/com.kingsoft.wpsoffice.mac", "~/Library/Caches/org.mozilla.thunderbird/*", "~/Library/Caches/com.apple.mail/*", "Office 容器内 Data/Library/Caches、Data/tmp、Data/Library/Logs/*"],
+    "paths": [
+      "~/Library/Caches/com.microsoft.Word",
+      "~/Library/Caches/com.microsoft.Excel",
+      "~/Library/Caches/com.microsoft.Powerpoint",
+      "~/Library/Caches/com.microsoft.Outlook/*",
+      "~/Library/Caches/com.apple.iWork.*",
+      "~/Library/Caches/com.kingsoft.wpsoffice.mac",
+      "~/Library/Caches/org.mozilla.thunderbird/*",
+      "~/Library/Caches/com.apple.mail/*",
+      "~/Library/Containers/com.microsoft.Word/Data/Library/Caches/*",
+      "~/Library/Containers/com.microsoft.Word/Data/tmp/*",
+      "~/Library/Containers/com.microsoft.Word/Data/Library/Logs/*",
+      "~/Library/Containers/com.microsoft.Excel/Data/Library/Caches/*",
+      "~/Library/Containers/com.microsoft.Excel/Data/tmp/*",
+      "~/Library/Containers/com.microsoft.Excel/Data/Library/Logs/*"
+    ],
     "match": "Office 容器只清 Caches/tmp/Logs 三类子目录，容器本体保留",
     "default_selected": true,
     "risk": "low",
@@ -2202,9 +2577,9 @@
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:2440-2468",
+    "source": "artifacts/mole-cli/lib/clean/user.sh:2440-2466",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:112,114-117,334,494-495 (/Library/Caches/com.microsoft.*)"
+    "in_app_evidence": "report/p1a-strings.json:112,114-116,334,494-495 (/Library/Caches/com.microsoft.Excel/Outlook/Powerpoint/Word 及 Word/Excel 容器 tmp、Logs)"
   },
   {
     "id": "virtualization-01",
@@ -2224,21 +2599,27 @@
   {
     "id": "virtualization-02",
     "category": "user_cache",
-    "paths": ["Tart 虚拟机缓存（clean_tart_caches 判定面）"],
-    "match": "Tart/虚拟化进程判定；只清可重建缓存",
+    "paths": ["~/.tart/cache"],
+    "match": "仅当 ~/.tart/cache 存在、tart 命令可用且缓存大小大于 0 时进入；若 pgrep -x tart 未发现运行中的 tart 进程，则调用 tart prune --entries caches --older-than 30 清理超过 30 天的缓存条目（不删镜像）。检测到 tart 运行中或进程状态未知时跳过，命中白名单时跳过。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/clean/user.sh:2487-2581",
+    "source": "artifacts/mole-cli/lib/clean/user.sh:2487-2580",
     "in_app": "unknown"
   },
   {
     "id": "virtualization-03",
     "category": "user_cache",
-    "paths": ["~/Library/Caches/com.vmware.fusion", "~/Library/Caches/com.parallels.*", "~/VirtualBox VMs/.cache", "~/Library/Caches/lima/download/by-url-sha256/*", "~/.vagrant.d/tmp/*"],
+    "paths": [
+      "~/Library/Caches/com.vmware.fusion",
+      "~/Library/Caches/com.parallels.*",
+      "~/VirtualBox VMs/.cache",
+      "~/Library/Caches/lima/download/by-url-sha256/*",
+      "~/.vagrant.d/tmp/*"
+    ],
     "match": "只清缓存与下载缓存；不动 .vagrant.d 的 box 本体与虚拟机镜像",
     "default_selected": true,
     "risk": "medium",
@@ -2248,31 +2629,58 @@
     "protected_by": ["P-01"],
     "source": "artifacts/mole-cli/lib/clean/user.sh:2582-2594",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:123 (/Library/Caches/com.parallels.desktop.console), :469 (Parallels vmdirectorylist)"
+    "in_app_evidence": "report/p1a-strings.json:123 (/Library/Caches/com.parallels.desktop.console)"
   },
   {
     "id": "project-01",
     "category": "project",
     "paths": [
-      "**/node_modules", "**/target", "**/build", "**/dist", "**/venv", "**/.venv",
-      "**/.pytest_cache", "**/.mypy_cache", "**/.tox", "**/.nox", "**/.ruff_cache",
-      "**/.gradle", "**/.terragrunt-cache", "**/__pycache__", "**/.next", "**/.nuxt",
-      "**/.output", "**/vendor", "**/bin（.NET，带守卫）", "**/obj", "**/.turbo",
-      "**/.parcel-cache", "**/.dart_tool", "**/.zig-cache", "**/zig-out", "**/.angular",
-      "**/.svelte-kit", "**/.astro", "**/coverage", "**/DerivedData", "**/Pods",
-      "**/.cxx", "**/.expo", "**/.build"
+      "**/node_modules",
+      "**/target",
+      "**/build",
+      "**/dist",
+      "**/venv",
+      "**/.venv",
+      "**/.pytest_cache",
+      "**/.mypy_cache",
+      "**/.tox",
+      "**/.nox",
+      "**/.ruff_cache",
+      "**/.gradle",
+      "**/.terragrunt-cache",
+      "**/__pycache__",
+      "**/.next",
+      "**/.nuxt",
+      "**/.output",
+      "**/vendor",
+      "**/bin",
+      "**/obj",
+      "**/.turbo",
+      "**/.parcel-cache",
+      "**/.dart_tool",
+      "**/.zig-cache",
+      "**/zig-out",
+      "**/.angular",
+      "**/.svelte-kit",
+      "**/.astro",
+      "**/coverage",
+      "**/DerivedData",
+      "**/Pods",
+      "**/.cxx",
+      "**/.expo",
+      "**/.build"
     ],
-    "match": "只在“项目根”内匹配（MOLE_PURGE_PROJECT_INDICATORS：package.json / Cargo.toml / go.mod / pyproject.toml / requirements.txt / pom.xml / build.gradle / terragrunt.hcl / Gemfile / composer.json / pubspec.yaml / Package.swift / Makefile / build.zig / build.zig.build / .git）；默认 min_age 7 天、depth 1..6；剪枝 .git/Library/.Trash/Applications 与 dataless；逐项过 authored-content / 占用中 / vendor / SwiftPM 判定",
+    "match": "只在“项目根”内匹配：根须命中 MOLE_PURGE_PROJECT_INDICATORS（package.json / Cargo.toml / go.mod / pyproject.toml / requirements.txt / pom.xml / build.gradle / terragrunt.hcl / Gemfile / composer.json / pubspec.yaml / Package.swift / Makefile / build.zig / build.zig.zon / .git）或 monorepo 指示符（lerna.json / pnpm-workspace.yaml / nx.json / rush.json / .git，purge_shared.sh:77-105、163-180）；扫描深度 1..6（project.sh:19-20），按名剪枝 .git/Library/.Trash/Applications 并在支持时剪掉 dataless（在线专用）目录（:1059-1073）。候选逐项过 authored-content / 占用中 / vendor（仅 PHP composer）/ SwiftPM 判定（:942-1031），其中 bin 仅在识别为 .NET 构建目录（父目录有 .csproj/.fsproj/.vbproj 且自身含 Debug/Release）时才删（:982-989、:476-492），DerivedData 一律保护 ~/Library/Developer/Xcode/DerivedData（:992-999）。MIN_AGE_DAYS=7 不是硬性天数门槛，只把 7 天内有改动的目录标为 recent（:17、:1616-1691），并从默认选中排除：交互默认勾选非 recent（:1963-1964），非交互同样只选非 recent（:3526-3536）。",
     "default_selected": false,
-    "risk": "high",
+    "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["PG-01", "PG-02", "PG-03", "PG-04", "PG-05", "PG-06", "PG-07"],
     "source": "artifacts/mole-cli/lib/clean/purge_shared.sh:17-105",
-    "secondary_source": "artifacts/mole-cli/lib/clean/project.sh:15-40,942-1030,1720-1754",
-    "in_app": false,
-    "in_app_evidence": "P1a §9：App 类型清单中未见 purge 对应实现；App 字符串也无 purge 相关路径"
+    "secondary_source": "artifacts/mole-cli/lib/clean/project.sh:15-22, artifacts/mole-cli/lib/clean/project.sh:942-1031, artifacts/mole-cli/lib/clean/project.sh:1720-1751",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:344 (/Library/Developer/Xcode/DerivedData)、:53 (/Library/Caches/CocoaPods)（仅同工具其他路径：本条删除的是项目内的 DerivedData/Pods，引擎在 project.sh:992-999 明确保护 ~/Library/Developer/Xcode/DerivedData）"
   },
   {
     "id": "project-02",
@@ -2296,48 +2704,62 @@
   {
     "id": "project-03",
     "category": "project",
-    "paths": ["Python 字节码缓存组（clean_python_bytecode_cache_group 判定面）", "项目缓存根（discover_project_cache_roots：.pytest_cache / __pycache__ / .mypy_cache 等）"],
-    "match": "pycache_has_bytecode 确认含字节码；CACHEDIR.TAG 签名校验（MOLE_CACHEDIR_TAG_SIGNATURE）；带 scan 预算与 prefetch；scan 超时/失败不得把部分输出送入删除循环",
+    "paths": ["**/.next", "**/__pycache__", "**/.dart_tool"],
+    "match": "清理面限于 discover_project_cache_roots 发现的根（MOLE_PURGE_DEFAULT_SEARCH_PATHS 与 ~/.config/mole/purge_paths，外加 $HOME/*/ 下命中 MOLE_PURGE_PROJECT_INDICATORS 的项目目录；点目录与 Library/Applications 等跳过，见 caches.sh:254-346、281-291）：每根 maxdepth 9 只找 .next/__pycache__/.dart_tool 三类目录（:419），其中 __pycache__ 须含 *.pyc/*.pyo 才处理（:373、:348-363）。含 git 跟踪文件或 git 状态未知的目录跳过（:702-713、:944-947），再经终审复检 git 归属/嵌套仓库/路径身份后由 safe_remove 整目录永久删除（:725-763、:970）；扫描按 6s 超时预算并 prefetch 并行，超时或非零即丢弃 scan 与 processed 临时文件、不进入删除（:398-477），结束时失败的 scan 只计 skipped 并释放临时文件（:1313-1352）。",
     "default_selected": true,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["PG-04", "PG-05"],
-    "source": "artifacts/mole-cli/lib/clean/caches.sh:231-480,809-1023,1024-1080",
-    "secondary_source": "artifacts/mole-cli/lib/clean/purge_shared.sh:107-108",
+    "source": "artifacts/mole-cli/lib/clean/caches.sh:231-477, artifacts/mole-cli/lib/clean/caches.sh:809-1021, artifacts/mole-cli/lib/clean/caches.sh:1024-1072",
+    "secondary_source": "artifacts/mole-cli/lib/clean/purge_shared.sh:55-105",
     "in_app": "unknown"
   },
   {
     "id": "project-04",
     "category": "project",
-    "paths": ["项目产物候选（clean_project_cache_target 的最终删除点）"],
+    "paths": ["**/.next/cache/*", "**/.dart_tool", "**/build"],
     "match": "最终 guard：is_safe_configured_purge_artifact + 活动状态未变 + 未受保护 + 扫描根身份未变 + 目标身份未变；任一不满足即拒绝",
     "default_selected": false,
-    "risk": "high",
+    "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["PG-05"],
-    "source": "artifacts/mole-cli/lib/clean/caches.sh:725-808",
+    "source": "artifacts/mole-cli/lib/clean/caches.sh:765-807",
     "in_app": false
   },
   {
     "id": "installer-01",
     "category": "installer",
     "paths": [
-      "~/Downloads/**/*.dmg", "~/Downloads/**/*.pkg", "~/Downloads/**/*.mpkg", "~/Downloads/**/*.iso", "~/Downloads/**/*.xip",
-      "~/Downloads/**/*.zip（仅当 is_installer_zip 判定为安装包）",
-      "~/Desktop/**", "~/Documents/**"
+      "~/Downloads/**/*.dmg",
+      "~/Downloads/**/*.pkg",
+      "~/Downloads/**/*.mpkg",
+      "~/Downloads/**/*.iso",
+      "~/Downloads/**/*.xip",
+      "~/Downloads/**/*.zip（仅 is_installer_zip 判定为安装包）",
+      "~/Desktop/**/*.{dmg,pkg,mpkg,iso,xip,zip}",
+      "~/Documents/**/*.{dmg,pkg,mpkg,iso,xip,zip}",
+      "~/Public/**/*.{dmg,pkg,mpkg,iso,xip,zip}",
+      "~/Library/Downloads/**/*.{dmg,pkg,mpkg,iso,xip,zip}",
+      "/Users/Shared/**/*.{dmg,pkg,mpkg,iso,xip,zip}",
+      "/Users/Shared/Downloads/**/*.{dmg,pkg,mpkg,iso,xip,zip}",
+      "~/Library/Caches/Homebrew/**/*.{dmg,pkg,mpkg,iso,xip,zip}",
+      "~/Library/Mobile Documents/com~apple~CloudDocs/Downloads/**/*.{dmg,pkg,mpkg,iso,xip,zip}",
+      "~/Library/Containers/com.apple.mail/Data/Library/Mail Downloads/**/*.{dmg,pkg,mpkg,iso,xip,zip}",
+      "~/Library/Application Support/Telegram Desktop/**/*.{dmg,pkg,mpkg,iso,xip,zip}",
+      "~/Downloads/Telegram Desktop/**/*.{dmg,pkg,mpkg,iso,xip,zip}"
     ],
-    "match": "扫描范围由 scan_all_installers 决定（含桌面/文稿/下载，Info.plist 的三条 NS*FolderUsageDescription 与之对应）；.zip 必须先通过 is_installer_zip 判定；按安装包年龄与体积分类；删除用 mole_delete 且带 planned identity",
+    "match": "扫描 INSTALLER_SCAN_PATHS 的 12 个目录（最多 2 层，fd/find 只取 *.dmg/*.pkg/*.mpkg/*.iso/*.xip/*.zip，跳过符号链接），.zip 还须通过 is_installer_zip（前 50 项含 .app/pkg/dmg/xip）；去重排序后全部默认不勾选，需用户勾选并 Enter 确认；删除前校验 planned identity 与体积，mole_delete 默认永久删除。",
     "default_selected": false,
     "risk": "medium",
     "needs_admin": false,
     "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/bin/installer.sh:1-3,72-128,134-227,702-797",
+    "source": "artifacts/mole-cli/bin/installer.sh:143-210",
     "in_app": true,
     "in_app_evidence": "report/p1a-strings.json:56-58（NSDesktopFolder/NSDocumentsFolder/NSDownloadsFolderUsageDescription：扫描残留安装包）"
   },
@@ -2353,13 +2775,13 @@
     "command": null,
     "protected_by": ["P-01"],
     "source": "artifacts/mole-cli/bin/installer.sh:671-797",
-    "in_app": true
+    "in_app": "unknown"
   },
   {
     "id": "optimize-01",
     "category": "optimize",
     "paths": ["DNS 缓存（dscacheutil -flushcache + mDNSResponder SIGHUP）"],
-    "match": "有活动 VPN 接口时**跳过** mDNSResponder SIGHUP（has_active_vpn_interface）；需 sudo",
+    "match": "非 dry-run 时先预检 optimize_sudo_available，未获授权即记 skipped；进入 flush_dns_cache 后先调 has_active_vpn_interface，VPN 命中返回 2 时整段刷新（dscacheutil 与 mDNSResponder SIGHUP）在 engine/lib/optimize/tasks.sh:167-171 提前返回跳过，VPN 状态未知返回 3 同样跳过。刷新本身需 sudo，SIGHUP 被 macOS 拒绝时回退为 sudo -u _mdnsresponder killall -u _mdnsresponder -HUP mDNSResponder，仍失败记 skipped。",
     "default_selected": false,
     "risk": "medium",
     "needs_admin": true,
@@ -2367,35 +2789,35 @@
     "command": "sudo dscacheutil -flushcache; sudo launchctl kill SIGHUP system/com.apple.mDNSResponder",
     "protected_by": [],
     "source": "artifacts/mole-cli/lib/optimize/tasks.sh:164-208（VPN 判定 97-163）",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:624 (dscacheutil 命令字符串)"
+    "in_app": "unknown"
   },
   {
     "id": "optimize-02",
     "category": "optimize",
     "paths": ["系统缓存刷新（opt_cache_refresh 判定面）"],
-    "match": "需 sudo；按 catalog 任务表执行",
+    "match": "遍历 ~/Library/Caches 下 com.apple.QuickLook.thumbnailcache、com.apple.iconservices.store、com.apple.iconservices 三个目标（tasks.sh:217-221），逐项先经 should_protect_path 剔除受保护路径（:251），余项交 safe_remove 永久删除（:281，sink 为 file_ops.sh:1816 的 rm -rf）；删除后用外部命令 qlmanage -r cache 与 qlmanage -r 重建（:233/:238），dry-run 时只置刷新计数不动作（:229-231）。该任务在 catalog 以 cache_refresh 注册、safe 值 true（catalog.sh:31-33、:144-145），由 bin/optimize.sh:318-323 串行调用，任务自身不要求 sudo。",
     "default_selected": false,
     "risk": "medium",
-    "needs_admin": true,
+    "needs_admin": false,
     "action": "command",
     "command": null,
     "protected_by": [],
-    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:209-315",
-    "in_app": true
+    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:209-309",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:83（仅覆盖三目标中的 com.apple.iconservices.store 一项；QuickLook.thumbnailcache 与 iconservices 两项在 p1a 无对应，:374-376 的 /Library/QuickLook 是另一路径，仅同工具相近）"
   },
   {
     "id": "optimize-03",
     "category": "optimize",
-    "paths": ["~/Library/Saved Application State 清理（opt_saved_state_cleanup）"],
-    "match": "需 sudo 的分支与用户分支分开",
+    "paths": ["~/Library/Saved Application State/*.savedState"],
+    "match": "仅当 ~/Library/Saved Application State 存在时才扫描：用 run_with_timeout 包裹外部 find 找出该目录下 mtime 超过 MOLE_SAVED_STATE_AGE_DAYS（30 天）的 *.savedState 目录（tasks.sh:330-341）；逐项先经 should_protect_path 剔除受保护路径（:349），余项交 safe_remove 永久删除（:353，sink 为 file_ops.sh:1816 的 rm -rf）；find 失败只置 scan_failed 并继续，超时/信号则沿 mole_rc_timeout_or_signal 退出（:342-347）。该任务在 catalog 以 saved_state_cleanup 注册、safe 值 true（catalog.sh:34-36、:144-145），由 bin/optimize.sh:318-323 串行调用，任务自身不要求 sudo。",
     "default_selected": false,
-    "risk": "medium",
-    "needs_admin": true,
-    "action": "command",
+    "risk": "low",
+    "needs_admin": false,
+    "action": "delete",
     "command": null,
     "protected_by": ["P-01"],
-    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:316-380",
+    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:316-373",
     "in_app": "unknown"
   },
   {
@@ -2423,19 +2845,20 @@
     "action": "command",
     "command": "dscacheutil -q host -a name example.com（探测）",
     "protected_by": [],
-    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:424-464,720-824",
-    "in_app": true
+    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:424-462, artifacts/mole-cli/lib/optimize/tasks.sh:720-822",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:624 (dscacheutil)（仅命令名，非路径证据）"
   },
   {
     "id": "optimize-06",
     "category": "optimize",
-    "paths": ["隔离属性清理（opt_quarantine_cleanup）"],
-    "match": "只清 com.apple.quarantine 标记，不动文件本身",
+    "paths": ["~/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2"],
+    "match": "清空 QuarantineEventsV2 库内的下载跟踪记录（DELETE FROM LSQuarantineEvent 后 VACUUM），不清除文件的 com.apple.quarantine 隔离标记；缺少 sqlite3、库文件不存在、命中 should_protect_path 或记录数为 0 时直接跳过。",
     "default_selected": false,
     "risk": "low",
     "needs_admin": false,
     "action": "command",
-    "command": "xattr -d com.apple.quarantine（判定面见 tasks.sh）",
+    "command": "sqlite3 <db> \"DELETE FROM LSQuarantineEvent; VACUUM;\"",
     "protected_by": [],
     "source": "artifacts/mole-cli/lib/optimize/tasks.sh:465-527",
     "in_app": "unknown"
@@ -2444,16 +2867,16 @@
     "id": "optimize-07",
     "category": "optimize",
     "paths": ["SQLite VACUUM（opt_sqlite_vacuum 判定面）"],
-    "match": "需 sudo；只对可安全独占的库执行；活跃数据库（含 WAL）一律跳过（OP-04）",
+    "match": "不需要 sudo；只处理 ~/Library 下 Mail/Messages/Safari 用户库，-wal/-shm 后缀与 should_protect_path 命中的库跳过（OP-04），且 Mail/Safari/Messages 任一在运行即整条 SKIPPED；单库超过 100MB 或 freelist 占比不及 5% 的跳过，VACUUM 前先 PRAGMA integrity_check，仅检查为 ok 才执行。",
     "default_selected": false,
     "risk": "high",
-    "needs_admin": true,
+    "needs_admin": false,
     "action": "command",
     "command": "sqlite3 <db> VACUUM",
     "protected_by": ["OP-04"],
-    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:528-719",
+    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:528-712",
     "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:245 (/usr/bin/sqlite3)"
+    "in_app_evidence": "report/p1a-strings.json:363 (/Library/Messages/chat.db)"
   },
   {
     "id": "optimize-08",
@@ -2472,16 +2895,20 @@
   {
     "id": "optimize-09",
     "category": "optimize",
-    "paths": ["Spotlight 索引优化（opt_spotlight_index_optimize）", "Spotlight 孤儿规则清理（opt_prune_spotlight_orphan_rules）"],
-    "match": "只处理孤儿规则；索引重建为显式任务",
+    "paths": [
+      "/ (Spotlight 索引：mdutil -s / 探针 + sudo mdutil -E / 重建)",
+      "~/Library/Preferences/com.apple.Spotlight.plist（EnabledPreferenceRules 孤儿规则）"
+    ],
+    "match": "AC 供电且两次 mdfind 探针均慢时经 sudo 重建索引（tasks.sh:900-957）；孤儿清理只删 bundle_has_installed_app 返回 1 的条目，System.*/com.apple.*、首段非小写的开关项及解析异常一律保留（tasks.sh:1026-1046）",
     "default_selected": false,
     "risk": "medium",
     "needs_admin": true,
     "action": "command",
     "command": "mdutil / mdfind（判定面见 tasks.sh:879-1098）",
     "protected_by": [],
-    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:879-1098",
-    "in_app": true
+    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:879-1097",
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:379（仅同工具其他路径：/Library/Spotlight 为 Spotlight 目录，非本 paths 的索引/偏好文件）"
   },
   {
     "id": "optimize-10",
@@ -2501,7 +2928,7 @@
     "id": "optimize-11",
     "category": "optimize",
     "paths": ["遗留覆盖审计（opt_legacy_overrides_audit）"],
-    "match": "只审计与提示，不删除",
+    "match": "检测全局域 NSAppSleepDisabled 与 com.apple.frameworks.diskimages 的 skip-verify* 覆盖键；命中后通过 defaults delete 删除覆盖键以恢复 macOS 默认，白名单路径跳过，MOLE_DRY_RUN=1 时仅预览不删除",
     "default_selected": false,
     "risk": "low",
     "needs_admin": false,
@@ -2514,15 +2941,15 @@
   {
     "id": "optimize-12",
     "category": "optimize",
-    "paths": ["损坏的 LaunchAgents（opt_launch_agents_cleanup）"],
-    "match": "仅在卷已挂载时处理；**不** launchctl unload（避免把待修复程序停掉）；判定“损坏”后才动",
+    "paths": ["~/Library/LaunchAgents/*.plist"],
+    "match": "只扫描 ~/Library/LaunchAgents/*.plist：取 :Program，为空再取 :ProgramArguments:0；仅当该值为绝对路径、目标已缺失、且不在未挂载的 /Volumes/<disk> 上（launch_agent_volume_mounted）时计入损坏。命中后只逐条 printf 提示并以 ATTENTION 汇总，从不删除/移动 plist，也不做 launchctl unload（注释明示缺程序不代表服务不需要，unload 会作用到 label）；无 sudo。",
     "default_selected": false,
-    "risk": "medium",
+    "risk": "low",
     "needs_admin": false,
-    "action": "command",
+    "action": "report",
     "command": null,
     "protected_by": ["N-16"],
-    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:1218-1293",
+    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:1218-1292",
     "in_app": true,
     "in_app_evidence": "report/p1a-strings.json:522-542（LaunchAgents 清单）, :779 (StartupItemScanner)"
   },
@@ -2537,9 +2964,8 @@
     "action": "command",
     "command": "sudo periodic daily weekly monthly",
     "protected_by": [],
-    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:1294-1347",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:645 (periodic 命令字符串)"
+    "source": "artifacts/mole-cli/lib/optimize/tasks.sh:1297-1345",
+    "in_app": "unknown"
   },
   {
     "id": "optimize-14",
@@ -2576,13 +3002,13 @@
     "match": "**默认禁用**：diskutil verifyVolume 触发内核级 I/O；只在显式请求时运行，只校验不修复",
     "default_selected": false,
     "risk": "medium",
-    "needs_admin": true,
+    "needs_admin": false,
     "action": "command",
     "command": "diskutil verifyVolume /",
     "protected_by": [],
     "source": "artifacts/mole-cli/lib/optimize/tasks.sh:1501-1546",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:622 (diskutil 命令字符串)"
+    "in_app": "unknown",
+    "in_app_evidence": "report/p1a-strings.json:622 (diskutil 命令名)（仅同工具其他路径）"
   },
   {
     "id": "optimize-17",
@@ -2610,8 +3036,7 @@
     "command": "sudo -n sfltool dumpbtm（兜底解析）",
     "protected_by": ["N-16"],
     "source": "artifacts/mole-cli/lib/optimize/tasks.sh:1621-2103",
-    "in_app": true,
-    "in_app_evidence": "report/p1a-strings.json:653 (sfltool 命令字符串)"
+    "in_app": "unknown"
   },
   {
     "id": "optimize-19",
