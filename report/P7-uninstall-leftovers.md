@@ -180,3 +180,44 @@
 5. **空格/中文/点号本身不产生误删。** 删除层按行读、全程引号（`B:827-828`、`B:833-837`），`validate_path_for_deletion` 还会拒绝换行/控制符（`lib/core/file_ops.sh:1184-1188`）。这些字符的风险是“变体造不出真实名 → 漏找”（B2 全部），以及折叠变体撞上独立产品（已并入 B1-07）。
 6. **`Foo 2` 是贯穿 7 份单元报告的系统性缺口。** 后缀表只认英文频道词（`AP:1351-1352`），导致：名字派生漏找（B2-01）、家族识别失效（B1-17）、共享判定失效（`B:1079-1082`）、Homebrew 识别失效（B2-10）。这是投入产出比最高的一处修复。
 
+
+## 修复状态
+
+2026-11-19 完成（集成分支 p7b-fix，已合入 engine main）。口径见 P7b-fix-policy.md：宁可漏删，不可误删。
+
+| 编号 | 状态 | 改法 | 提交 |
+|---|---|---|---|
+| B1-01 | fixed | 渠道后缀表去掉 Edge，派生基名是厂商根（Microsoft/Google/Adobe…）时不派生，卸 Edge 不再碰 Microsoft 共享目录 | bf2494a |
+| B1-02 | fixed | Godot 根目录列入共享保护，编辑器和导出的游戏都不再整棵收 Application Support/Godot | 3ce7282 |
+| B1-03 | fixed | <bundle id>.* 前缀命中的容器/脚本目录必须是本 app 内嵌组件的 id 才收 | a241aa2 |
+| B1-04 | fixed | Group Containers 只收 app 自己声明的，不收同 Team 共享的 App Group | 1490023 |
+| B1-05 | fixed | 名字是产品/厂商词（Code、Microsoft 等）时不按名字收共享数据目录 | 11a4d01 |
+| B1-06 | fixed | 按名字收数据叶子的门槛从 2 个字符提到 3 个（Go.app 不再收 ~/.config/go 等） | 06858e4 |
+| B1-07 | fixed | 折叠名（Foo Bar→FooBar）若属于另一个已安装应用就不收 | b7f18c5 |
+| B1-08 | fixed | bundle 末段派生的叶子若属于另一个已安装产品就不收 | ba86f2d |
+| B1-09 | fixed | electron-updater 缓存只在 app 自己声明且无其他安装共用时才收 | 81f08e8 |
+| B1-10 | fixed | Raycast 残留只按 bundle id 边界认，不再按名字子串 | 1e55cf9 |
+| B1-11 | fixed | Xcode 缓存只对 Apple 的 Xcode 清，名字含 Xcode 的第三方不再触发 | 2394ed3 |
+| B1-12 | fixed | ~/.android 缓存只对 Google 的 Android Studio 收 | 8c62c94 |
+| B1-13 | fixed | JetBrains IDE 残留只对 com.jetbrains.* 收 | 37d6515 |
+| B1-14 | fixed | VS Code 残留规则锚定到两个官方 bundle id | 80d8d26 |
+| B1-15 | fixed | ByHost 偏好只认 <id>.<UUID>.plist 精确形状 | 10f45cd |
+| B1-16 | fixed | 崩溃报告头部写的是别的 bundle 时不收 | 99d4a13 |
+| B1-17 | fixed | 名字边界收紧，FooBar 不再吃 Foo 开头的其他产品目录 | e963092 |
+| B1-18 | fixed | 认定 Homebrew cask 必须核对 cask 的 app 文件就是用户选的那个（-ef），不靠子串 | 6f7345d |
+| B1-19 | fixed | 精确 label 的 LaunchAgent 删除前核对其程序路径属于本 app | 17f007d |
+| B1-20 | fixed | CrashReporter 名字匹配在 UUID 边界截止，Foo 不再吃 Foo_Bar | b50b64d |
+| B1-21 | fixed | 系统 LaunchDaemon 按 label 组件边界认、Steam 共享库与通用 Live 目录不进系统残留预览 | e7f6519 |
+| B2-01 | kept | 保持现状：给 Foo 2 收 Foo 的目录会误删仍在用的旧版数据，宁可漏删 | — |
+| B2-02 | fixed | IntelliJ IDEA 补收 JetBrains 紧凑产品码目录（IU/IC） | 835ddbd |
+| B2-03 | fixed | 全角空格当作词间空格生成折叠变体，已装同名应用时不收 | 8e2f9a9 |
+| B2-04 | fixed | 带点的显示名补收去点后的数据目录 | df529fa |
+| B2-05 | fixed | 诊断报告前缀同时试带空格/不带空格两种写法 | 2e9b6ce |
+| B2-06 | fixed | PlayCover 包在 Finder 改名后，凭其 Info.plist id 校验后补收 | e67b6d4 |
+| B2-07 | fixed | PlayCover 别名目录里与包内文件字节一致的文件视为本包的，可收 | 69c6270 |
+| B2-08 | fixed | find -name 里转义应用名，[EAP] 等方括号按字面匹配 | 24b4224 |
+| B2-09 | kept | 保持现状：单字符名刻意不按名字找，宁可漏删 | — |
+| B2-10 | fixed | Homebrew cask 改按 Caskroom 链接归属反查，不靠名字猜 token | e2e9a8d |
+| B2-11 | fixed | 配置引用提示加锚定：Foo 不再命中 Foo 2，转义空格和 file:// 路径能命中（只读提示） | f483966 |
+| B2-12 | kept | 保持现状：只是不预选（方向安全），用户可在 D 菜单手动选 | — |
+| B2-13 | fixed | 带括号的渠道名（Foo (Beta)）先折叠再生成变体 | 7cd5697 |
