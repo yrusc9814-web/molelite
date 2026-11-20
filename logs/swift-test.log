@@ -1,0 +1,310 @@
+[0/1] Planning build
+Building for debugging...
+[0/9] /Users/runner/work/molelite/molelite/app/.build/arm64-apple-macosx/debug/MoleLitePackageTests.derived/runner.swift
+[0/9] Write sources
+[0/9] Copying Fixtures
+[3/9] Write sources
+[4/9] Write swift-version--79AA4F9932D1E87A.txt
+[6/12] Compiling MoleLiteTests FixtureLoader.swift
+[7/12] Compiling MoleLiteTests RulesCatalogTests.swift
+[8/12] Emitting module MoleLiteTests
+[9/12] Compiling MoleLiteTests DecodingTests.swift
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:31:14: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 29 | 
+ 30 |     func cleanPreview(timeout: TimeInterval) async throws -> EngineOutcome<CleanPreview> {
+ 31 |         lock.lock()
+    |              `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 32 |         _previewCalls += 1
+ 33 |         lock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:33:14: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 31 |         lock.lock()
+ 32 |         _previewCalls += 1
+ 33 |         lock.unlock()
+    |              `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 34 |         return EngineOutcome(value: CleanPreview(items: previewItems),
+ 35 |                              invocation: Self.invocation(arguments: ["--dry-run", "--json"]))
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:39:14: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 37 | 
+ 38 |     func cleanExecute(paths: [String], timeout: TimeInterval) async throws -> EngineOutcome<CleanExecutionReport> {
+ 39 |         lock.lock()
+    |              `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 40 |         _executeCalls.append(paths)
+ 41 |         lock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:41:14: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 39 |         lock.lock()
+ 40 |         _executeCalls.append(paths)
+ 41 |         lock.unlock()
+    |              `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 42 |         let records = paths.map {
+ 43 |             CleanExecutionRecord(path: $0, section: nil, action: "removed", reason: nil, sizeBytes: 1)
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:88:14: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 86 | 
+ 87 |     func uninstallPreview(appName: String, timeout: TimeInterval) async throws -> EngineOutcome<UninstallPreview> {
+ 88 |         lock.lock()
+    |              `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 89 |         _previewCalls += 1
+ 90 |         _previewAppNames.append(appName)
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:91:14: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 89 |         _previewCalls += 1
+ 90 |         _previewAppNames.append(appName)
+ 91 |         lock.unlock()
+    |              `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 92 |         return EngineOutcome(value: UninstallPreview(items: previewItems),
+ 93 |                              invocation: Self.invocation(arguments: ["--dry-run", "--json", appName]))
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:97:14: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 95 | 
+ 96 |     func uninstallExecute(appName: String, paths: [String], timeout: TimeInterval) async throws -> EngineOutcome<UninstallExecutionReport> {
+ 97 |         lock.lock()
+    |              `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 98 |         _executeCalls.append((app: appName, paths: paths))
+ 99 |         lock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:99:14: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 97 |         lock.lock()
+ 98 |         _executeCalls.append((app: appName, paths: paths))
+ 99 |         lock.unlock()
+    |              `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+100 |         let records = paths.map {
+101 |             UninstallExecutionRecord(app: appName, path: $0, kind: nil, action: "trashed", reason: nil, sizeBytes: 1)
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+[10/12] Compiling MoleLiteTests FakeEngines.swift
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:31:14: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 29 | 
+ 30 |     func cleanPreview(timeout: TimeInterval) async throws -> EngineOutcome<CleanPreview> {
+ 31 |         lock.lock()
+    |              `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 32 |         _previewCalls += 1
+ 33 |         lock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:33:14: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 31 |         lock.lock()
+ 32 |         _previewCalls += 1
+ 33 |         lock.unlock()
+    |              `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 34 |         return EngineOutcome(value: CleanPreview(items: previewItems),
+ 35 |                              invocation: Self.invocation(arguments: ["--dry-run", "--json"]))
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:39:14: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 37 | 
+ 38 |     func cleanExecute(paths: [String], timeout: TimeInterval) async throws -> EngineOutcome<CleanExecutionReport> {
+ 39 |         lock.lock()
+    |              `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 40 |         _executeCalls.append(paths)
+ 41 |         lock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:41:14: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 39 |         lock.lock()
+ 40 |         _executeCalls.append(paths)
+ 41 |         lock.unlock()
+    |              `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 42 |         let records = paths.map {
+ 43 |             CleanExecutionRecord(path: $0, section: nil, action: "removed", reason: nil, sizeBytes: 1)
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:88:14: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 86 | 
+ 87 |     func uninstallPreview(appName: String, timeout: TimeInterval) async throws -> EngineOutcome<UninstallPreview> {
+ 88 |         lock.lock()
+    |              `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 89 |         _previewCalls += 1
+ 90 |         _previewAppNames.append(appName)
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:91:14: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 89 |         _previewCalls += 1
+ 90 |         _previewAppNames.append(appName)
+ 91 |         lock.unlock()
+    |              `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 92 |         return EngineOutcome(value: UninstallPreview(items: previewItems),
+ 93 |                              invocation: Self.invocation(arguments: ["--dry-run", "--json", appName]))
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:97:14: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 95 | 
+ 96 |     func uninstallExecute(appName: String, paths: [String], timeout: TimeInterval) async throws -> EngineOutcome<UninstallExecutionReport> {
+ 97 |         lock.lock()
+    |              `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 98 |         _executeCalls.append((app: appName, paths: paths))
+ 99 |         lock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Tests/MoleLiteTests/FakeEngines.swift:99:14: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+ 97 |         lock.lock()
+ 98 |         _executeCalls.append((app: appName, paths: paths))
+ 99 |         lock.unlock()
+    |              `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+100 |         let records = paths.map {
+101 |             UninstallExecutionRecord(app: appName, path: $0, kind: nil, action: "trashed", reason: nil, sizeBytes: 1)
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+[11/14] Compiling MoleLiteTests SafetyTests.swift
+[12/14] Compiling MoleLiteTests resource_bundle_accessor.swift
+[13/16] Compiling MoleLitePackageTests runner.swift
+[14/16] Emitting module MoleLitePackageTests
+[14/16] Write Objects.LinkFileList
+[15/16] Linking MoleLitePackageTests
+Build complete! (12.77s)
+Test Suite 'All tests' started at 2026-11-20 05:36:18.425.
+Test Suite 'MoleLitePackageTests.xctest' started at 2026-11-20 05:36:18.427.
+Test Suite 'DecodingTests' started at 2026-11-20 05:36:18.427.
+Test Case '-[MoleLiteTests.DecodingTests testAllFixturesDecode]' started.
+Test Case '-[MoleLiteTests.DecodingTests testAllFixturesDecode]' passed (0.009 seconds).
+Test Case '-[MoleLiteTests.DecodingTests testAnalyzeFields]' started.
+Test Case '-[MoleLiteTests.DecodingTests testAnalyzeFields]' passed (0.001 seconds).
+Test Case '-[MoleLiteTests.DecodingTests testCleanExecutionFields]' started.
+Test Case '-[MoleLiteTests.DecodingTests testCleanExecutionFields]' passed (0.001 seconds).
+Test Case '-[MoleLiteTests.DecodingTests testCleanPreviewFields]' started.
+Test Case '-[MoleLiteTests.DecodingTests testCleanPreviewFields]' passed (0.001 seconds).
+Test Case '-[MoleLiteTests.DecodingTests testUninstallExecutionFields]' started.
+Test Case '-[MoleLiteTests.DecodingTests testUninstallExecutionFields]' passed (0.000 seconds).
+Test Case '-[MoleLiteTests.DecodingTests testUninstallPreviewFields]' started.
+Test Case '-[MoleLiteTests.DecodingTests testUninstallPreviewFields]' passed (0.000 seconds).
+Test Case '-[MoleLiteTests.DecodingTests testUnknownAndMissingFieldsAreTolerated]' started.
+Test Case '-[MoleLiteTests.DecodingTests testUnknownAndMissingFieldsAreTolerated]' passed (0.000 seconds).
+Test Suite 'DecodingTests' passed at 2026-11-20 05:36:18.439.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.012 (0.012) seconds
+Test Suite 'RulesCatalogTests' started at 2026-11-20 05:36:18.439.
+Test Case '-[MoleLiteTests.RulesCatalogTests testAccessorsFallBackToEngineValue]' started.
+Test Case '-[MoleLiteTests.RulesCatalogTests testAccessorsFallBackToEngineValue]' passed (0.000 seconds).
+Test Case '-[MoleLiteTests.RulesCatalogTests testApplyToPreviewKeepsOrderAndCount]' started.
+Test Case '-[MoleLiteTests.RulesCatalogTests testApplyToPreviewKeepsOrderAndCount]' passed (0.001 seconds).
+Test Case '-[MoleLiteTests.RulesCatalogTests testDecodeIgnoresExtraKeysAndDropsBlankIDs]' started.
+Test Case '-[MoleLiteTests.RulesCatalogTests testDecodeIgnoresExtraKeysAndDropsBlankIDs]' passed (0.001 seconds).
+Test Case '-[MoleLiteTests.RulesCatalogTests testDecodeInvalidJSONYieldsEmptyCatalogWithError]' started.
+Test Case '-[MoleLiteTests.RulesCatalogTests testDecodeInvalidJSONYieldsEmptyCatalogWithError]' passed (0.002 seconds).
+Test Case '-[MoleLiteTests.RulesCatalogTests testDecodeReportsDuplicatesAndKeepsLast]' started.
+Test Case '-[MoleLiteTests.RulesCatalogTests testDecodeReportsDuplicatesAndKeepsLast]' passed (0.000 seconds).
+Test Case '-[MoleLiteTests.RulesCatalogTests testLoadFromEnvironmentText]' started.
+Test Case '-[MoleLiteTests.RulesCatalogTests testLoadFromEnvironmentText]' passed (0.000 seconds).
+Test Case '-[MoleLiteTests.RulesCatalogTests testOverrideReplacesEngineValues]' started.
+Test Case '-[MoleLiteTests.RulesCatalogTests testOverrideReplacesEngineValues]' passed (0.000 seconds).
+Test Case '-[MoleLiteTests.RulesCatalogTests testPartialOverrideOnlyTouchesPresentFields]' started.
+Test Case '-[MoleLiteTests.RulesCatalogTests testPartialOverrideOnlyTouchesPresentFields]' passed (0.000 seconds).
+Test Case '-[MoleLiteTests.RulesCatalogTests testSampleDecodesAllThreeFields]' started.
+Test Case '-[MoleLiteTests.RulesCatalogTests testSampleDecodesAllThreeFields]' passed (0.000 seconds).
+Test Suite 'RulesCatalogTests' passed at 2026-11-20 05:36:18.445.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.005 (0.005) seconds
+Test Suite 'SafetyTests' started at 2026-11-20 05:36:18.445.
+Test Case '-[MoleLiteTests.SafetyTests testCleanExecuteReceivesOnlySelectedSubsetOfPreview]' started.
+Test Case '-[MoleLiteTests.SafetyTests testCleanExecuteReceivesOnlySelectedSubsetOfPreview]' passed (0.001 seconds).
+Test Case '-[MoleLiteTests.SafetyTests testCleanExecuteWithEmptySelectionIsBlocked]' started.
+Test Case '-[MoleLiteTests.SafetyTests testCleanExecuteWithEmptySelectionIsBlocked]' passed (0.001 seconds).
+Test Case '-[MoleLiteTests.SafetyTests testCleanExecuteWithoutPreviewIsBlocked]' started.
+Test Case '-[MoleLiteTests.SafetyTests testCleanExecuteWithoutPreviewIsBlocked]' passed (0.000 seconds).
+Test Case '-[MoleLiteTests.SafetyTests testCleanNeedsAdminItemCannotBeSelectedOrExecuted]' started.
+Test Case '-[MoleLiteTests.SafetyTests testCleanNeedsAdminItemCannotBeSelectedOrExecuted]' passed (0.000 seconds).
+Test Case '-[MoleLiteTests.SafetyTests testUninstallExecuteReceivesOnlySelectedSubsetOfPreview]' started.
+Test Case '-[MoleLiteTests.SafetyTests testUninstallExecuteReceivesOnlySelectedSubsetOfPreview]' passed (0.012 seconds).
+Test Case '-[MoleLiteTests.SafetyTests testUninstallExecuteWithEmptySelectionIsBlocked]' started.
+Test Case '-[MoleLiteTests.SafetyTests testUninstallExecuteWithEmptySelectionIsBlocked]' passed (0.002 seconds).
+Test Case '-[MoleLiteTests.SafetyTests testUninstallExecuteWithoutPreviewIsBlocked]' started.
+Test Case '-[MoleLiteTests.SafetyTests testUninstallExecuteWithoutPreviewIsBlocked]' passed (0.000 seconds).
+Test Case '-[MoleLiteTests.SafetyTests testUninstallNeedsAdminItemCannotBeSelectedOrExecuted]' started.
+Test Case '-[MoleLiteTests.SafetyTests testUninstallNeedsAdminItemCannotBeSelectedOrExecuted]' passed (0.010 seconds).
+Test Case '-[MoleLiteTests.SafetyTests testUninstallSelectingOtherAppInvalidatesPreview]' started.
+Test Case '-[MoleLiteTests.SafetyTests testUninstallSelectingOtherAppInvalidatesPreview]' passed (0.008 seconds).
+Test Suite 'SafetyTests' passed at 2026-11-20 05:36:18.480.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.035 (0.035) seconds
+Test Suite 'MoleLitePackageTests.xctest' passed at 2026-11-20 05:36:18.480.
+	 Executed 25 tests, with 0 failures (0 unexpected) in 0.052 (0.053) seconds
+Test Suite 'All tests' passed at 2026-11-20 05:36:18.480.
+	 Executed 25 tests, with 0 failures (0 unexpected) in 0.052 (0.055) seconds
+◇ Test run started.
+↳ Testing Library Version: 124.4
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests passed after 0.001 seconds.

@@ -1,0 +1,7 @@
+commit: 720caa82ae7b9b6df66d2e147993c5789ff8f885
+swift build: success
+swift test:  success
+打包:        success
+截图:        success
+go test:     success
+bats:        skipped

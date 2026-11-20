@@ -1,0 +1,274 @@
+Building for debugging...
+[0/6] Write sources
+[0/6] Write MoleLite-entitlement.plist
+[2/6] Write swift-version--79AA4F9932D1E87A.txt
+[4/20] Emitting module MoleLite
+[5/26] Compiling MoleLite AboutView.swift
+[6/26] Compiling MoleLite AnalyzeRows.swift
+[7/26] Compiling MoleLite AnalyzeView.swift
+[8/26] Compiling MoleLite AnalyzeViewModel.swift
+[9/26] Compiling MoleLite CleanResultView.swift
+[10/26] Compiling MoleLite CleanView.swift
+[11/26] Compiling MoleLite CleanViewModel.swift
+[12/26] Compiling MoleLite EngineRunner.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:349:19: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+347 |         try Task.checkCancellation()
+348 | 
+349 |         stateLock.lock()
+    |                   `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:351:19: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+349 |         stateLock.lock()
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+    |                   `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+352 |         if alreadyRunning {
+353 |             throw EngineError.busy
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+[13/26] Compiling MoleLite EngineRunning.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:349:19: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+347 |         try Task.checkCancellation()
+348 | 
+349 |         stateLock.lock()
+    |                   `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:351:19: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+349 |         stateLock.lock()
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+    |                   `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+352 |         if alreadyRunning {
+353 |             throw EngineError.busy
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+[14/26] Compiling MoleLite Models.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:349:19: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+347 |         try Task.checkCancellation()
+348 | 
+349 |         stateLock.lock()
+    |                   `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:351:19: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+349 |         stateLock.lock()
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+    |                   `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+352 |         if alreadyRunning {
+353 |             throw EngineError.busy
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+[15/26] Compiling MoleLite RulesCatalog.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:349:19: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+347 |         try Task.checkCancellation()
+348 | 
+349 |         stateLock.lock()
+    |                   `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:351:19: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+349 |         stateLock.lock()
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+    |                   `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+352 |         if alreadyRunning {
+353 |             throw EngineError.busy
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+[16/26] Compiling MoleLite MoleLiteApp.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:349:19: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+347 |         try Task.checkCancellation()
+348 | 
+349 |         stateLock.lock()
+    |                   `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:351:19: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+349 |         stateLock.lock()
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+    |                   `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+352 |         if alreadyRunning {
+353 |             throw EngineError.busy
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+[17/26] Compiling MoleLite NoteStaff.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:349:19: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+347 |         try Task.checkCancellation()
+348 | 
+349 |         stateLock.lock()
+    |                   `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:351:19: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+349 |         stateLock.lock()
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+    |                   `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+352 |         if alreadyRunning {
+353 |             throw EngineError.busy
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+[18/26] Compiling MoleLite Theme.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Uninstall/UninstallViewModel.swift:55:14: warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 43 |     /// 最小协议：生产用 EngineRunner.shared，测试注入假 runner。
+ 44 |     private let runner: any UninstallEngineRunning
+ 45 |     private let fileManager: FileManager
+    |                 `- note: mutation of this property is only permitted within the actor
+ 46 | 
+ 47 |     /// `catalog` 只为与清理页保持同样的构造方式：uninstall 预览项没有 `rule_id`，
+    :
+ 53 |     ) {
+ 54 |         self.runner = runner
+ 55 |         self.fileManager = fileManager
+    |              `- warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 56 |     }
+ 57 | 
+[19/26] Compiling MoleLite UninstallItemRow.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Uninstall/UninstallViewModel.swift:55:14: warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 43 |     /// 最小协议：生产用 EngineRunner.shared，测试注入假 runner。
+ 44 |     private let runner: any UninstallEngineRunning
+ 45 |     private let fileManager: FileManager
+    |                 `- note: mutation of this property is only permitted within the actor
+ 46 | 
+ 47 |     /// `catalog` 只为与清理页保持同样的构造方式：uninstall 预览项没有 `rule_id`，
+    :
+ 53 |     ) {
+ 54 |         self.runner = runner
+ 55 |         self.fileManager = fileManager
+    |              `- warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 56 |     }
+ 57 | 
+[20/26] Compiling MoleLite UninstallModels.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Uninstall/UninstallViewModel.swift:55:14: warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 43 |     /// 最小协议：生产用 EngineRunner.shared，测试注入假 runner。
+ 44 |     private let runner: any UninstallEngineRunning
+ 45 |     private let fileManager: FileManager
+    |                 `- note: mutation of this property is only permitted within the actor
+ 46 | 
+ 47 |     /// `catalog` 只为与清理页保持同样的构造方式：uninstall 预览项没有 `rule_id`，
+    :
+ 53 |     ) {
+ 54 |         self.runner = runner
+ 55 |         self.fileManager = fileManager
+    |              `- warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 56 |     }
+ 57 | 
+[21/26] Compiling MoleLite UninstallResultView.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Uninstall/UninstallViewModel.swift:55:14: warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 43 |     /// 最小协议：生产用 EngineRunner.shared，测试注入假 runner。
+ 44 |     private let runner: any UninstallEngineRunning
+ 45 |     private let fileManager: FileManager
+    |                 `- note: mutation of this property is only permitted within the actor
+ 46 | 
+ 47 |     /// `catalog` 只为与清理页保持同样的构造方式：uninstall 预览项没有 `rule_id`，
+    :
+ 53 |     ) {
+ 54 |         self.runner = runner
+ 55 |         self.fileManager = fileManager
+    |              `- warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 56 |     }
+ 57 | 
+[22/26] Compiling MoleLite UninstallView.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Uninstall/UninstallViewModel.swift:55:14: warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 43 |     /// 最小协议：生产用 EngineRunner.shared，测试注入假 runner。
+ 44 |     private let runner: any UninstallEngineRunning
+ 45 |     private let fileManager: FileManager
+    |                 `- note: mutation of this property is only permitted within the actor
+ 46 | 
+ 47 |     /// `catalog` 只为与清理页保持同样的构造方式：uninstall 预览项没有 `rule_id`，
+    :
+ 53 |     ) {
+ 54 |         self.runner = runner
+ 55 |         self.fileManager = fileManager
+    |              `- warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 56 |     }
+ 57 | 
+[23/26] Compiling MoleLite UninstallViewModel.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Uninstall/UninstallViewModel.swift:55:14: warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 43 |     /// 最小协议：生产用 EngineRunner.shared，测试注入假 runner。
+ 44 |     private let runner: any UninstallEngineRunning
+ 45 |     private let fileManager: FileManager
+    |                 `- note: mutation of this property is only permitted within the actor
+ 46 | 
+ 47 |     /// `catalog` 只为与清理页保持同样的构造方式：uninstall 预览项没有 `rule_id`，
+    :
+ 53 |     ) {
+ 54 |         self.runner = runner
+ 55 |         self.fileManager = fileManager
+    |              `- warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 56 |     }
+ 57 | 
+[23/26] Write Objects.LinkFileList
+[24/26] Linking MoleLite
+[25/26] Applying MoleLite
+Build complete! (28.83s)

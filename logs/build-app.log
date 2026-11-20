@@ -1,0 +1,80 @@
+==> swift build -c release（/Users/runner/work/molelite/molelite/app）
+Building for production...
+[0/4] Write sources
+[1/4] Write swift-version--79AA4F9932D1E87A.txt
+[3/5] Compiling MoleLite AboutView.swift
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:349:19: warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+347 |         try Task.checkCancellation()
+348 | 
+349 |         stateLock.lock()
+    |                   `- warning: instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+
+Foundation.NSLock.lock:2:11: note: 'lock()' declared here
+1 | class NSLock {
+2 | open func lock()}
+  |           `- note: 'lock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Engine/EngineRunner.swift:351:19: warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+349 |         stateLock.lock()
+350 |         let alreadyRunning = activeProcess != nil
+351 |         stateLock.unlock()
+    |                   `- warning: instance method 'unlock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead; this is an error in the Swift 6 language mode
+352 |         if alreadyRunning {
+353 |             throw EngineError.busy
+
+Foundation.NSLock.unlock:2:11: note: 'unlock()' declared here
+1 | class NSLock {
+2 | open func unlock()}
+  |           `- note: 'unlock()' declared here
+3 | 
+
+/Users/runner/work/molelite/molelite/app/Sources/MoleLite/Uninstall/UninstallViewModel.swift:55:14: warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 43 |     /// 最小协议：生产用 EngineRunner.shared，测试注入假 runner。
+ 44 |     private let runner: any UninstallEngineRunning
+ 45 |     private let fileManager: FileManager
+    |                 `- note: mutation of this property is only permitted within the actor
+ 46 | 
+ 47 |     /// `catalog` 只为与清理页保持同样的构造方式：uninstall 预览项没有 `rule_id`，
+    :
+ 53 |     ) {
+ 54 |         self.runner = runner
+ 55 |         self.fileManager = fileManager
+    |              `- warning: main actor-isolated property 'fileManager' can not be mutated from a nonisolated context; this is an error in the Swift 6 language mode
+ 56 |     }
+ 57 | 
+[3/5] Write Objects.LinkFileList
+[4/5] Linking MoleLite
+Build complete! (31.45s)
+==> 清理旧包：/Users/runner/work/molelite/molelite/app/build/MoleLite.app
+==> 拷入可执行文件
+==> 写 Info.plist
+==> 拷入引擎：/Users/runner/work/molelite/molelite/engine -> /Users/runner/work/molelite/molelite/app/build/MoleLite.app/Contents/Resources/engine
+==> 编译 analyze：go version go1.26.0 darwin/arm64
+go: downloading go1.26.10 (darwin/arm64)
+go: downloading github.com/cespare/xxhash/v2 v2.3.0
+go: downloading github.com/charmbracelet/x/ansi v0.11.9
+go: downloading github.com/charmbracelet/bubbletea v1.3.10
+go: downloading golang.org/x/sys v0.50.0
+go: downloading github.com/charmbracelet/lipgloss v1.1.0
+go: downloading github.com/charmbracelet/x/term v0.2.2
+go: downloading github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
+go: downloading github.com/muesli/cancelreader v0.2.2
+go: downloading github.com/clipperhouse/displaywidth v0.11.0
+go: downloading github.com/clipperhouse/uax29/v2 v2.7.0
+go: downloading github.com/lucasb-eyer/go-colorful v1.4.1
+go: downloading github.com/mattn/go-runewidth v0.0.27
+go: downloading github.com/charmbracelet/x/cellbuf v0.0.14
+go: downloading github.com/muesli/termenv v0.16.0
+go: downloading github.com/rivo/uniseg v0.4.7
+go: downloading github.com/charmbracelet/colorprofile v0.4.1
+go: downloading github.com/aymanbagabas/go-osc52/v2 v2.0.1
+go: downloading github.com/mattn/go-isatty v0.0.20
+go: downloading github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e
+==> 拷入 rules.json
+==> 清扩展属性并做 ad-hoc 签名
+/Users/runner/work/molelite/molelite/app/build/MoleLite.app: replacing existing signature
+==> 完成：/Users/runner/work/molelite/molelite/app/build/MoleLite.app（ 23M）
+==> 试运行：open "/Users/runner/work/molelite/molelite/app/build/MoleLite.app"
